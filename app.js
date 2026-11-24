@@ -1,0 +1,402 @@
+'use strict';
+/* العب مع المصري (LaebMaAlMasry) client. Keyboard-first, screen-reader friendly. */
+(() => {
+  const $ = id => document.getElementById(id);
+  const state = {
+    lang: localStorage.getItem('gp.lang') || 'ar',
+    notif: localStorage.getItem('gp.notif') !== 'off',
+    music: Number(localStorage.getItem('gp.music') || '0'),
+    name: localStorage.getItem('gp.name') || '',
+    token: localStorage.getItem('gp.token') || '',
+    table: null,
+    game: null,
+    mic: false,
+    role: 'player',
+    ws: null,
+  };
+  // shared with games.js (separate IIFE)
+  window.state = state;
+  window.t = key => t(key);
+  window.announce = m => announce(m);
+  window.send = obj => send(obj);
+  window.notifPlay = () => notifAudio.play().catch(() => {});
+  const t = key => STRINGS[state.lang][key];
+  const terr = code => (STRINGS[state.lang].errors[code]) || code;
+
+  // ---------- audio ----------
+  const notifAudio = new Audio('notification.ogg');
+  const musicAudio = new Audio('music.ogg');
+  musicAudio.loop = true;
+  function applyMusic() {
+    musicAudio.volume = state.music / 100 * 0.5;
+    if (state.music > 0) musicAudio.play().catch(() => {});
+    else musicAudio.pause();
+  }
+
+  // ---------- i18n ----------
+  function applyLang() {
+    document.documentElement.lang = state.lang;
+    document.documentElement.dir = state.lang === 'ar' ? 'rtl' : 'ltr';
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+    $('mic-button').textContent = state.mic ? t('micOn') : t('micOff');
+    document.querySelectorAll(`input[name="lang"]`).forEach(r => { r.checked = r.value === state.lang; });
+    document.querySelectorAll(`input[name="music"]`).forEach(r => { r.checked = Number(r.value) === state.music; });
+    $('notif-toggle').checked = state.notif;
+    if (state.table) renderTable();
+    renderFriends(lastFriends);
+    renderTables(lastTables);
+    if (window.GP) window.GP.renderGame();
+  }
+
+  function announce(msg) {
+    const live = $('live');
+    live.textContent = '';
+    setTimeout(() => { live.textContent = msg; }, 30);
+  }
+
+  // ---------- views ----------
+  function show(view) {
+    for (const v of ['login', 'lobby', 'table', 'world']) $('view-' + v).hidden = v !== view;
+    const focusTarget = { login: 'login-name', lobby: 'create-form', table: 'chat-input', world: 'adv-focus' }[view];
+    const el = focusTarget === 'create-form' ? $('table-name-input') : $(focusTarget);
+    if (el) el.focus();
+  }
+  window.showView = show;
+
+  // ---------- rendering ----------
+  let lastTables = [];
+  let lastFriends = [];
+  function renderTables(tables) {
+    lastTables = tables;
+    const ul = $('tables');
+    ul.innerHTML = '';
+    $('no-tables').hidden = tables.length > 0;
+    for (const tb of tables) {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.textContent = `${t('joinTable')(tb.name)} — ${t('playersCount')(tb.players.length, tb.max)}`;
+      b.addEventListener('click', () => send({ type: 'join_table', id: tb.id }));
+      li.appendChild(b);
+      ul.appendChild(li);
+    }
+  }
+  function renderFriends(friends) {
+    lastFriends = friends;
+    window.lastFriendsList = friends;
+    const ul = $('friends');
+    ul.innerHTML = '';
+    for (const f of friends) {
+      const li = document.createElement('li');
+      li.textContent = f.online ? t('friendOnline')(f.name) : t('friendOffline')(f.name);
+      ul.appendChild(li);
+    }
+  }
+  function renderTable() {
+    const tb = state.table;
+    if (!tb) return;
+    $('table-h').textContent = t('tableOf')(tb.name);
+    const ul = $('players');
+    ul.innerHTML = '';
+    for (const p of tb.players) {
+      const li = document.createElement('li');
+      li.textContent = p;
+      ul.appendChild(li);
+    }
+  }
+  function addChatLine(from, text) {
+    const p = document.createElement('p');
+    const strong = document.createElement('strong');
+    strong.textContent = from + ': ';
+    p.appendChild(strong);
+    p.appendChild(document.createTextNode(text));
+    const log = $('chat-log');
+    log.appendChild(p);
+    log.scrollTop = log.scrollHeight;
+    if (state.notif && from !== state.name) notifAudio.play().catch(() => {});
+  }
+
+  // ---------- voice (LiveKit) ----------
+  let lkRoom = null;
+  let micTrack = null;
+  async function joinVoice() {
+    send({ type: 'voice_join' });
+  }
+  async function connectVoice(msg) {
+    if (!window.LivekitClient) return;
+    try {
+      lkRoom = new window.LivekitClient.Room();
+      lkRoom.on('trackSubscribed', track => {
+        if (track.kind === 'audio') {
+          const el = track.attach();
+          el.style.display = 'none';
+          document.body.appendChild(el);
+        }
+      });
+      await lkRoom.connect(msg.url, msg.token);
+      window.__voiceRoom = lkRoom; // test hook
+      // never auto-publish: the mic only goes live from an explicit F2 / button press
+    } catch (e) {
+      lkRoom = null;
+    }
+  }
+  async function publishMic(on) {
+    if (!lkRoom) return;
+    if (on && !micTrack) {
+      micTrack = await window.LivekitClient.createLocalAudioTrack();
+      await lkRoom.localParticipant.publishTrack(micTrack);
+    } else if (!on && micTrack) {
+      lkRoom.localParticipant.unpublishTrack(micTrack);
+      micTrack.stop();
+      micTrack = null;
+    }
+  }
+  function leaveVoice() {
+    if (micTrack) { micTrack.stop(); micTrack = null; }
+    if (lkRoom) { lkRoom.disconnect(); lkRoom = null; }
+  }
+
+  // ---------- mic ----------
+  function setMic(on) {
+    state.mic = on;
+    $('mic-button').setAttribute('aria-pressed', String(on));
+    $('mic-button').textContent = on ? t('micOn') : t('micOff');
+    announce(on ? t('micOnAnnounce') : t('micOffAnnounce'));
+    publishMic(on).catch(() => {
+      state.mic = false;
+      $('mic-button').setAttribute('aria-pressed', 'false');
+      $('mic-button').textContent = t('micOff');
+    });
+  }
+
+  // ---------- websocket ----------
+  function send(obj) { if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify(obj)); }
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${location.host}`);
+    state.ws = ws;
+    ws.onopen = () => {
+      send({ type: 'hello', name: state.name, token: state.token });
+    };
+    ws.onclose = () => {
+      if (!state.name) return; // never logged in; nothing to retry
+      announce(t('disconnected'));
+      setTimeout(connect, 2000);
+    };
+    ws.onmessage = ev => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch { return; }
+      handle(msg);
+    };
+  }
+  function handle(msg) {
+    switch (msg.type) {
+      case 'welcome':
+        state.token = msg.token;
+        state.role = msg.role || 'player';
+        localStorage.setItem('gp.token', msg.token);
+        localStorage.setItem('gp.name', state.name);
+        $('login-status').textContent = '';
+        announce(t('connected'));
+        applyMusic();
+        applyRole();
+        show('lobby');
+        break;
+      case 'rules':
+        renderRules();
+        $('rules-dialog').showModal();
+        $('rules-body').focus();
+        break;
+      case 'role_changed':
+        state.role = msg.role;
+        applyRole();
+        announce(t('roleChanged'));
+        break;
+      case 'report_sent': announce(t('reportSent')(msg.name)); break;
+      case 'blocked': announce(t('blockedMsg')(msg.name)); break;
+      case 'unblocked': announce(t('unblockedMsg')(msg.name)); break;
+      case 'admin_done': announce(t('adminDone')(msg.action, msg.name)); break;
+      case 'penalized': announce(t('penalized')(msg.action)); break;
+      case 'announcement': announce(t('announcementFrom')(msg.from, msg.text)); break;
+      case 'mod_notice': announce(t('modReport')(msg.by, msg.name)); break;
+      case 'error':
+        if (!state.table && $('view-table').hidden) $('login-status').textContent = terr(msg.code);
+        announce(terr(msg.code));
+        break;
+      case 'tables': renderTables(msg.tables); break;
+      case 'friends': renderFriends(msg.friends); break;
+      case 'joined':
+        state.table = msg.table;
+        // every table join starts muted; only an explicit press enables the mic
+        state.mic = false;
+        $('mic-button').setAttribute('aria-pressed', 'false');
+        $('mic-button').textContent = t('micOff');
+        $('chat-log').innerHTML = '';
+        renderTable();
+        show('table');
+        joinVoice();
+        break;
+      case 'voice_token':
+        connectVoice(msg);
+        break;
+      case 'table_update': {
+        const before = new Set(state.table ? state.table.players : []);
+        state.table = msg.table;
+        renderTable();
+        for (const p of msg.table.players) if (!before.has(p)) announce(t('joined')(p));
+        for (const p of before) if (!msg.table.players.includes(p)) announce(t('left')(p));
+        break;
+      }
+      case 'chat': addChatLine(msg.from, msg.text); break;
+      case 'adv_event': window.ADV.onEvent(msg); break;
+      case 'adv_left': window.ADV.onLeft(); break;
+      case 'pm': {
+        const mine = msg.from === state.name;
+        const text = mine ? t('advPmTo')(msg.to, msg.text) : t('advPmFrom')(msg.from, msg.text);
+        announce(text);
+        if (window.ADV) window.ADV.play('pm');
+        if (!$('view-world').hidden && window.ADV) window.ADV.log(text);
+        break;
+      }
+      case 'pm_offline': announce(t('advPmOffline')(msg.to)); break;
+      case 'game_started':
+        state.game = { id: msg.game, state: msg.state, hand: null, spectator: !!msg.spectator };
+        window.GP.renderGame();
+        announce(t('gameStarted')(t({ farkle: 'gameFarkle', dominoes: 'gameDominoes', snakes: 'gameSnakes' }[msg.game] || 'gameFarkle')));
+        break;
+      case 'game_state':
+        if (state.game) { state.game.state = msg.state; window.GP.renderGame(); }
+        break;
+      case 'game_hand':
+        if (state.game) { state.game.hand = msg.hand; window.GP.renderGame(); }
+        break;
+      case 'game_event':
+        window.GP.announceGameEvent(msg);
+        break;
+      case 'game_ended':
+        announce(msg.reason === 'player_left' ? t('playerLeftGame')(msg.player) : t('gameEnded'));
+        state.game = null;
+        window.GP.renderGame();
+        break;
+      case 'left':
+        state.table = null;
+        state.game = null;
+        leaveVoice();
+        show('lobby');
+        break;
+    }
+  }
+
+  // ---------- forms ----------
+  $('login-form').addEventListener('submit', ev => {
+    ev.preventDefault();
+    const name = $('login-name').value.trim();
+    if (!name) return;
+    state.name = name;
+    if (state.ws && state.ws.readyState === 1) send({ type: 'hello', name, token: state.token });
+    else connect();
+  });
+  $('create-form').addEventListener('submit', ev => {
+    ev.preventDefault();
+    send({ type: 'create_table', name: $('table-name-input').value });
+    $('table-name-input').value = '';
+  });
+  $('friend-form').addEventListener('submit', ev => {
+    ev.preventDefault();
+    send({ type: 'add_friend', name: $('friend-name').value });
+    $('friend-name').value = '';
+  });
+  $('chat-form').addEventListener('submit', ev => {
+    ev.preventDefault();
+    const text = $('chat-input').value.trim();
+    if (text) send({ type: 'chat', text });
+    $('chat-input').value = '';
+  });
+  $('leave-button').addEventListener('click', () => send({ type: 'leave_table' }));
+  $('mic-button').addEventListener('click', () => setMic(!state.mic));
+  $('bot-button').addEventListener('click', () => send({ type: 'add_bot' }));
+  $('settings-button').addEventListener('click', () => $('settings-dialog').showModal());
+
+  // ---------- moderation UI ----------
+  function applyRole() {
+    const mod = state.role === 'mod' || state.role === 'owner';
+    $('admin-panel').hidden = !mod;
+    $('owner-form').hidden = state.role !== 'owner';
+    $('announce-form').hidden = state.role !== 'owner';
+  }
+  function renderRules() { $('rules-body').innerHTML = t('rulesHtml'); }
+  $('rules-button').addEventListener('click', () => { renderRules(); $('rules-dialog').showModal(); $('rules-body').focus(); });
+  $('rules-form').addEventListener('submit', () => send({ type: 'accept_rules' }));
+  $('report-form').addEventListener('submit', ev => {
+    ev.preventDefault();
+    send({ type: 'report', name: $('report-name').value, reason: $('report-reason').value });
+    $('report-name').value = '';
+    $('report-reason').value = '';
+  });
+  $('block-form').addEventListener('submit', ev => {
+    ev.preventDefault();
+    send({ type: 'block', name: $('block-name').value });
+    $('block-name').value = '';
+  });
+  $('admin-form').addEventListener('submit', ev => {
+    ev.preventDefault();
+    send({ type: 'admin_action', action: $('admin-action').value, name: $('admin-name').value, hours: Number($('admin-hours').value), reason: $('admin-reason').value });
+  });
+  $('owner-form').addEventListener('submit', ev => {
+    ev.preventDefault();
+    send({ type: 'admin_action', action: $('owner-action').value, name: $('owner-name').value });
+  });
+  $('announce-form').addEventListener('submit', ev => {
+    ev.preventDefault();
+    send({ type: 'admin_action', action: 'announce', text: $('announce-text').value });
+    $('announce-text').value = '';
+  });
+
+  // ---------- settings ----------
+  document.querySelectorAll('input[name="lang"]').forEach(r => r.addEventListener('change', () => {
+    state.lang = r.value;
+    localStorage.setItem('gp.lang', state.lang);
+    applyLang();
+  }));
+  $('notif-toggle').addEventListener('change', () => {
+    state.notif = $('notif-toggle').checked;
+    localStorage.setItem('gp.notif', state.notif ? 'on' : 'off');
+    if (state.notif) notifAudio.play().catch(() => {});
+  });
+  document.querySelectorAll('input[name="music"]').forEach(r => r.addEventListener('change', () => {
+    state.music = Number(r.value);
+    localStorage.setItem('gp.music', String(state.music));
+    applyMusic();
+  }));
+
+  // ---------- global shortcuts: F1 settings, F2 mic ----------
+  document.addEventListener('keydown', ev => {
+    if (ev.key === 'F1') {
+      ev.preventDefault();
+      const d = $('settings-dialog');
+      if (d.open) d.close(); else d.showModal();
+    } else if (ev.key === 'F2') {
+      ev.preventDefault();
+      setMic(!state.mic);
+    } else if (ev.code === 'KeyR') {
+      const tag = ev.target && ev.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (ev.target && ev.target.isContentEditable)) return;
+      if ($('view-lobby').hidden && $('view-world').hidden) return;
+      if ($('settings-dialog').open) return;
+      ev.preventDefault();
+      renderRules();
+      $('rules-dialog').showModal();
+      $('rules-body').focus();
+    } else if (ev.code === 'KeyB') {
+      const tag = ev.target && ev.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (ev.target && ev.target.isContentEditable)) return;
+      if ($('view-table').hidden || $('settings-dialog').open) return;
+      ev.preventDefault();
+      send({ type: 'add_bot' });
+    }
+  });
+
+  // ---------- boot ----------
+  applyLang();
+  if (state.name) { $('login-name').value = state.name; connect(); }
+  else show('login');
+})();

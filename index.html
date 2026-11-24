@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>العب مع المصري</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1 id="brand">العب مع المصري</h1>
+</header>
+<main>
+  <section id="view-login" aria-labelledby="login-h">
+    <h2 id="login-h" data-i18n="loginTitle"></h2>
+    <p id="login-status" role="alert"></p>
+    <form id="login-form">
+      <label for="login-name" data-i18n="nameLabel"></label>
+      <input id="login-name" name="name" autocomplete="username" maxlength="24" required>
+      <button type="submit" data-i18n="loginButton"></button>
+    </form>
+  </section>
+
+  <section id="view-lobby" aria-labelledby="lobby-h" hidden>
+    <h2 id="lobby-h" data-i18n="lobbyTitle"></h2>
+    <p><button id="adv-enter-button" data-i18n="advEnter"></button></p>
+    <p><button id="rules-button" data-i18n="rulesButton"></button></p>
+    <form id="create-form">
+      <label for="table-name-input" data-i18n="tableNameLabel"></label>
+      <input id="table-name-input" maxlength="40">
+      <button type="submit" data-i18n="createTable"></button>
+    </form>
+    <h3 data-i18n="tablesHeading"></h3>
+    <ul id="tables"></ul>
+    <p id="no-tables" data-i18n="noTables"></p>
+    <h3 data-i18n="friendsHeading"></h3>
+    <form id="friend-form">
+      <label for="friend-name" data-i18n="friendNameLabel"></label>
+      <input id="friend-name" maxlength="24">
+      <button type="submit" data-i18n="addFriend"></button>
+    </form>
+    <ul id="friends"></ul>
+    <h3 data-i18n="reportHeading"></h3>
+    <form id="report-form">
+      <label for="report-name" data-i18n="reportNameLabel"></label>
+      <input id="report-name" maxlength="24">
+      <label for="report-reason" data-i18n="reportReasonLabel"></label>
+      <input id="report-reason" maxlength="300">
+      <button type="submit" data-i18n="reportSend"></button>
+    </form>
+    <h3 data-i18n="blockHeading"></h3>
+    <form id="block-form">
+      <label for="block-name" data-i18n="blockNameLabel"></label>
+      <input id="block-name" maxlength="24">
+      <button type="submit" data-i18n="blockButton"></button>
+    </form>
+    <section id="admin-panel" aria-labelledby="admin-h" hidden>
+      <h3 id="admin-h" data-i18n="adminHeading"></h3>
+      <form id="admin-form">
+        <label for="admin-name" data-i18n="adminNameLabel"></label>
+        <input id="admin-name" maxlength="24">
+        <label for="admin-action" data-i18n="adminActionLabel"></label>
+        <select id="admin-action">
+          <option value="mute1h" data-i18n="actMute1h"></option>
+          <option value="kick" data-i18n="actKick"></option>
+          <option value="tempban" data-i18n="actTempban"></option>
+          <option value="unban" data-i18n="actUnban"></option>
+        </select>
+        <label for="admin-hours" data-i18n="adminHoursLabel"></label>
+        <input id="admin-hours" type="number" min="1" max="8760" value="24">
+        <label for="admin-reason" data-i18n="adminReasonLabel"></label>
+        <input id="admin-reason" maxlength="200">
+        <button type="submit" data-i18n="adminDo"></button>
+      </form>
+      <form id="owner-form" hidden>
+        <label for="owner-action" data-i18n="adminActionLabel"></label>
+        <select id="owner-action">
+          <option value="permaban" data-i18n="actPermaban"></option>
+          <option value="addmod" data-i18n="actAddmod"></option>
+          <option value="removemod" data-i18n="actRemovemod"></option>
+        </select>
+        <label for="owner-name" data-i18n="adminNameLabel"></label>
+        <input id="owner-name" maxlength="24">
+        <button type="submit" data-i18n="adminDo"></button>
+      </form>
+      <form id="announce-form" hidden>
+        <label for="announce-text" data-i18n="announceLabel"></label>
+        <input id="announce-text" maxlength="500">
+        <button type="submit" data-i18n="announceSend"></button>
+      </form>
+    </section>
+  </section>
+
+  <section id="view-world" aria-labelledby="adv-h" hidden>
+    <h2 id="adv-h" data-i18n="advTitle"></h2>
+    <div class="table-actions">
+      <button id="adv-leave-button" data-i18n="advLeave"></button>
+    </div>
+    <p data-i18n="advInstructions"></p>
+    <div id="adv-focus" tabindex="-1" role="application" aria-label="روح المغامرة"></div>
+    <h3 data-i18n="chatHeading"></h3>
+    <div id="adv-log" role="log" aria-live="polite"></div>
+    <form id="pm-form">
+      <label for="pm-input" data-i18n="advPmLabel"></label>
+      <input id="pm-input" maxlength="500" autocomplete="off">
+      <button type="submit" data-i18n="advPmSend"></button>
+    </form>
+  </section>
+
+  <section id="view-table" aria-labelledby="table-h" hidden>
+    <h2 id="table-h"></h2>
+    <div class="table-actions">
+      <button id="leave-button" data-i18n="leaveTable"></button>
+      <button id="mic-button" aria-pressed="false"></button>
+      <button id="bot-button" data-i18n="addBot"></button>
+      <button id="settings-button" data-i18n="settingsButton"></button>
+    </div>
+    <h3 data-i18n="playersHeading"></h3>
+    <ul id="players"></ul>
+    <section id="game-area" aria-labelledby="game-h">
+      <h3 id="game-h" data-i18n="gameHeading"></h3>
+      <div id="game-menu">
+        <p data-i18n="startGamePrompt"></p>
+        <div class="table-actions">
+          <button data-start-game="farkle"></button>
+          <button data-start-game="dominoes"></button>
+          <button data-start-game="snakes"></button>
+        </div>
+      </div>
+      <div id="game-view" hidden></div>
+    </section>
+    <h3 data-i18n="chatHeading"></h3>
+    <div id="chat-log" role="log" aria-live="polite" aria-label="chat"></div>
+    <form id="chat-form">
+      <label for="chat-input" data-i18n="chatLabel"></label>
+      <input id="chat-input" maxlength="500" autocomplete="off">
+      <button type="submit" data-i18n="sendButton"></button>
+    </form>
+  </section>
+</main>
+
+<dialog id="rules-dialog" aria-labelledby="rules-h">
+  <h2 id="rules-h" data-i18n="rulesTitle"></h2>
+  <div id="rules-body" tabindex="0"></div>
+  <form method="dialog" id="rules-form">
+    <button type="submit" data-i18n="rulesAccept"></button>
+  </form>
+</dialog>
+
+<dialog id="settings-dialog" aria-labelledby="settings-h">
+  <h2 id="settings-h" data-i18n="settingsTitle"></h2>
+  <form method="dialog" id="settings-form">
+    <fieldset>
+      <legend data-i18n="languageLegend"></legend>
+      <label><input type="radio" name="lang" value="ar"> <span data-i18n="langAr"></span></label>
+      <label><input type="radio" name="lang" value="en"> <span data-i18n="langEn"></span></label>
+    </fieldset>
+    <fieldset>
+      <legend data-i18n="notifLegend"></legend>
+      <label><input type="checkbox" id="notif-toggle"> <span data-i18n="notifLabel"></span></label>
+    </fieldset>
+    <fieldset>
+      <legend data-i18n="musicLegend"></legend>
+      <label><input type="radio" name="music" value="0"> <span data-i18n="musicOff"></span></label>
+      <label><input type="radio" name="music" value="50"> 50%</label>
+      <label><input type="radio" name="music" value="100"> 100%</label>
+    </fieldset>
+    <button type="submit" data-i18n="closeSettings"></button>
+  </form>
+</dialog>
+
+<div id="live" class="sr-only" aria-live="polite"></div>
+<script type="module">
+  import * as LK from './livekit-client.esm.mjs';
+  window.LivekitClient = LK;
+  window.dispatchEvent(new Event('livekit-ready'));
+</script>
+<script src="i18n.js"></script>
+<script src="games.js"></script>
+<script src="adventure.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
