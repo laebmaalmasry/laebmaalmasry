@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>روح المغامرة</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: Tahoma, Arial, sans-serif; background: #12141c; color: #eef; margin: 0; padding: 1rem; line-height: 1.7; }
+  h1 { font-size: 1.5rem; color: #ffd97a; }
+  h2 { font-size: 1.2rem; color: #9ecbff; }
+  [hidden] { display: none !important; }
+  button, input { font-family: inherit; font-size: inherit; padding: .4rem .8rem; border-radius: 6px; border: 1px solid #555; background: #1e2330; color: #eef; }
+  button { cursor: pointer; }
+  button:focus, input:focus { outline: 3px solid #ffd97a; outline-offset: 2px; }
+  fieldset { border: 1px solid #444; border-radius: 8px; margin: .5rem 0; }
+  #live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  #adv-log { border: 1px solid #444; border-radius: 8px; padding: .5rem; min-height: 4rem; max-height: 40vh; overflow-y: auto; margin: .5rem 0; }
+  #adv-log p { margin: .15rem 0; }
+  #login-status { color: #ff9a9a; }
+  dialog { background: #1a1e2a; color: #eef; border: 1px solid #666; border-radius: 10px; max-width: 90vw; }
+  #rules-body:focus { outline: 3px solid #ffd97a; }
+</style>
+</head>
+<body>
+  <h1>روح المغامرة</h1>
+
+  <section id="view-login" aria-labelledby="login-h">
+    <h2 id="login-h" data-i18n="loginTitle"></h2>
+    <form id="login-form">
+      <p>
+        <label for="login-name" data-i18n="nameLabel"></label>
+        <input id="login-name" maxlength="24" autocomplete="off" required>
+      </p>
+      <p><button type="submit" data-i18n="loginButton"></button></p>
+    </form>
+    <p id="login-status" role="alert"></p>
+    <fieldset>
+      <legend data-i18n="languageLegend"></legend>
+      <label><input type="radio" name="lang" value="ar"> <span data-i18n="langAr"></span></label>
+      <label><input type="radio" name="lang" value="en"> <span data-i18n="langEn"></span></label>
+    </fieldset>
+  </section>
+
+  <section id="view-lobby" aria-labelledby="lobby-h" hidden>
+    <h2 id="lobby-h">روح المغامرة</h2>
+    <p><button id="adv-enter-button" data-i18n="advEnter"></button></p>
+    <p data-i18n="advLobbyHint"></p>
+  </section>
+
+  <section id="view-world" aria-labelledby="adv-h" hidden>
+    <h2 id="adv-h" data-i18n="advTitle"></h2>
+    <p><button id="adv-leave-button" data-i18n="advLeave"></button></p>
+    <div id="adv-focus" tabindex="-1" role="application" aria-label="روح المغامرة"></div>
+    <div id="adv-log" role="log" aria-live="polite"></div>
+    <form id="pm-form">
+      <label for="pm-input" data-i18n="advPmLabel"></label>
+      <input id="pm-input" maxlength="500" autocomplete="off">
+    </form>
+  </section>
+
+  <dialog id="rules-dialog" aria-labelledby="rules-h">
+    <h2 id="rules-h" data-i18n="rulesTitle"></h2>
+    <div id="rules-body" tabindex="0"></div>
+    <form method="dialog" id="rules-form">
+      <button type="submit" data-i18n="rulesAccept"></button>
+    </form>
+  </dialog>
+
+  <div id="live" role="status" aria-live="polite"></div>
+
+  <script src="i18n.js"></script>
+  <script src="adventure.js"></script>
+  <script src="rooh-app.js"></script>
+</body>
+</html>
