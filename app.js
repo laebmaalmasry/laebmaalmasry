@@ -593,7 +593,7 @@
   const SCREENS = ['screen-game', 'screen-chat', 'screen-log', 'screen-table'];
   function screenMainEl(id) {
     if (id === 'screen-game') return $('farkle-primary') || $('game-view').querySelector('button:not([hidden])') || $('game-menu-buttons').querySelector('button') || $('game-view');
-    if (id === 'screen-log') return $('farkle-log') || $('game-log-holder');
+    if (id === 'screen-log') return $('room-log') || $('farkle-log') || $('game-log-holder');
     if (id === 'screen-chat') return $('chat-input');
     if (id === 'screen-table') return $('leave-button');
     return null;
