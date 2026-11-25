@@ -207,7 +207,7 @@
     const ws = new WebSocket(`${proto}://${location.host}`);
     state.ws = ws;
     ws.onopen = () => {
-      send({ type: 'hello', name: state.name, token: state.token, version: CLIENT_VERSION });
+      send({ type: 'hello', name: state.name, token: state.token, code: state.pendingCode || undefined, version: CLIENT_VERSION });
     };
     ws.onclose = () => {
       if (!state.name) return; // never logged in; nothing to retry
@@ -231,6 +231,8 @@
         state.role = msg.role || 'player';
         localStorage.setItem('gp.token', msg.token);
         localStorage.setItem('gp.name', state.name);
+        state.pendingCode = '';
+        $('login-code').value = '';
         $('login-status').textContent = '';
         announce(t('connected'));
         applyMusic();
@@ -475,7 +477,8 @@
     const name = $('login-name').value.trim();
     if (!name) return;
     state.name = name;
-    if (state.ws && state.ws.readyState === 1) send({ type: 'hello', name, token: state.token, version: CLIENT_VERSION });
+    state.pendingCode = $('login-code').value.trim();
+    if (state.ws && state.ws.readyState === 1) send({ type: 'hello', name, token: state.token, code: state.pendingCode || undefined, version: CLIENT_VERSION });
     else connect();
   });
   $('create-form').addEventListener('submit', ev => {
