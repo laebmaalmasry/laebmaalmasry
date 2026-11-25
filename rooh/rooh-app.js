@@ -55,7 +55,8 @@
     const ws = new WebSocket(SERVER);
     state.ws = ws;
     ws.onopen = () => {
-      send({ type: 'hello', name: state.name, token: state.token, version: ROOH_VERSION });
+      const code = ($('login-code').value || '').trim();
+      send({ type: 'hello', name: state.name, token: state.token, code, version: ROOH_VERSION });
     };
     ws.onclose = () => {
       if (!state.name) return;
@@ -75,6 +76,7 @@
         state.token = msg.token;
         localStorage.setItem('rooh.token', msg.token);
         localStorage.setItem('rooh.name', state.name);
+        $('login-code').value = '';
         $('login-status').textContent = '';
         announce(t('connected'));
         show('lobby');
