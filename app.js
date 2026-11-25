@@ -20,7 +20,7 @@
   window.announce = m => announce(m);
   window.send = obj => send(obj);
   window.notifPlay = () => notifAudio.play().catch(() => {});
-  const CLIENT_VERSION = 'v5-2026-11-25';
+  const CLIENT_VERSION = 'v5.3-2026-11-25';
   window.CLIENT_VERSION = CLIENT_VERSION;
   const t = key => STRINGS[state.lang][key];
   const terr = code => (STRINGS[state.lang].errors[code]) || code;
@@ -338,20 +338,40 @@
   });
   const GAME_KEY = { farkle: 'gameFarkle', dominoes: 'gameDominoes', snakes: 'gameSnakes' };
 
-  // ---------- vertical-menu focus: Up/Down moves between buttons ----------
+  // ---------- vertical-menu model: Tab lands on a menu container, Up/Down + Enter inside ----------
+  const menuScopeOf = a => a && a.closest ? a.closest('#game-view, #game-menu-buttons, #lobby-games-menu') : null;
+  const menuButtons = scope => [...scope.querySelectorAll('button:not([hidden])')].filter(b => b.getAttribute('aria-disabled') !== 'true' && !b.disabled);
   document.addEventListener('keydown', ev => {
     if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
     const a = document.activeElement;
-    if (!a || a.tagName !== 'BUTTON') return;
-    const scope = a.closest('#game-view, #game-menu-buttons, #lobby-games-menu');
-    if (!scope) return;
-    const btns = [...scope.querySelectorAll('button:not([hidden])')].filter(b => b.getAttribute('aria-disabled') !== 'true' && !b.disabled);
-    if (btns.length < 2) return;
-    const i = btns.indexOf(a);
-    if (i < 0) return;
-    ev.preventDefault();
-    const next = ev.key === 'ArrowDown' ? (i + 1) % btns.length : (i - 1 + btns.length) % btns.length;
-    btns[next].focus();
+    if (!a) return;
+    if (a.tagName === 'BUTTON') {
+      const scope = menuScopeOf(a);
+      if (!scope) return;
+      const btns = menuButtons(scope);
+      if (btns.length < 2) return;
+      const i = btns.indexOf(a);
+      if (i < 0) return;
+      ev.preventDefault();
+      const next = ev.key === 'ArrowDown' ? (i + 1) % btns.length : (i - 1 + btns.length) % btns.length;
+      btns[next].focus();
+    } else if (a.matches && a.matches('#game-view, #game-menu-buttons, #lobby-games-menu')) {
+      const btns = menuButtons(a);
+      if (!btns.length) return;
+      ev.preventDefault();
+      (ev.key === 'ArrowDown' ? btns[0] : btns[btns.length - 1]).focus();
+    }
+  });
+
+  // when Tab lands on a menu container, go straight to the useful button
+  ['game-view', 'game-menu-buttons', 'lobby-games-menu'].forEach(id => {
+    const box = $(id);
+    if (!box) return;
+    box.addEventListener('focus', () => setTimeout(() => {
+      if (document.activeElement !== box) return;
+      const p = $('farkle-primary') || box.querySelector('button:not([hidden])');
+      if (p) p.focus();
+    }, 0));
   });
 
   // ---------- forms ----------
@@ -437,11 +457,26 @@
   }));
 
   // ---------- global shortcuts: F1 settings, F2 mic ----------
+  function renderHelp() {
+    const g = state.game;
+    const advOpen = !$('view-world').hidden;
+    $('help-body').innerHTML = t(g && g.id === 'farkle' ? 'helpFarkle' : advOpen ? 'helpAdv' : 'helpPlatform');
+  }
   document.addEventListener('keydown', ev => {
     if (ev.key === 'F1') {
       ev.preventDefault();
+      const d = $('help-dialog');
+      if (d.open) d.close(); else { renderHelp(); d.showModal(); $('help-body').focus(); }
+    } else if (ev.key === 'F10') {
+      ev.preventDefault();
       const d = $('settings-dialog');
       if (d.open) d.close(); else d.showModal();
+    } else if (ev.key === 'Escape') {
+      if (document.querySelector('dialog[open]')) return;
+      if ($('view-table').hidden) return;
+      const etag = ev.target && ev.target.tagName;
+      if (etag === 'INPUT' || etag === 'TEXTAREA') return;
+      send({ type: 'leave_table' });
     } else if (ev.key === 'F2') {
       ev.preventDefault();
       setMic(!state.mic);
