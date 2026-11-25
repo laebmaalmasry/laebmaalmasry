@@ -56,6 +56,35 @@
     setTimeout(() => { live.textContent = msg; }, 30);
   }
 
+  // ---------- room log (full table history, incl. voice lines) ----------
+  function roomLogLine(ev) {
+    switch (ev.k) {
+      case 'created': return t('logCreated')(ev.name, t(KIND_KEYS[ev.kind] || 'gameFarkle'), ev.min, ev.max);
+      case 'joined': return t('logJoined')(ev.name);
+      case 'left': return t('logLeft')(ev.name);
+      case 'kick': return t('logKicked')(ev.name);
+      case 'kickban': return t('logKickBanned')(ev.name);
+      case 'host': return t('logHost')(ev.name);
+      case 'voice': return t('logVoice')(ev.name);
+      default: return '';
+    }
+  }
+  function addRoomLine(text) {
+    if (!text) return;
+    const box = $('room-log');
+    if (!box) return;
+    const p = document.createElement('p');
+    p.textContent = text;
+    box.appendChild(p);
+  }
+  function renderRoomLog(log) {
+    const box = $('room-log');
+    if (!box) return;
+    box.innerHTML = '';
+    for (const ev of log) addRoomLine(roomLogLine(ev));
+  }
+  function appendRoomLog(ev) { addRoomLine(roomLogLine(ev)); }
+
   // ---------- views ----------
   function show(view) {
     for (const v of ['login', 'lobby', 'table', 'world']) $('view-' + v).hidden = v !== view;
@@ -72,6 +101,7 @@
   let lastFriends = [];
   function renderTables(tables) {
     lastTables = tables;
+    if (window.renderLobbyMenu) window.renderLobbyMenu(false);
     const ul = $('tables');
     ul.innerHTML = '';
     $('no-tables').hidden = tables.length > 0;
@@ -150,10 +180,11 @@
         if (micTrack) { micTrack.stop(); micTrack = null; }
         if (voiceWanted) { announce(t('voiceRetry')); send({ type: 'voice_join' }); }
       });
+      lkRoom.on('participantConnected', p => { addRoomLine(t('logVoice')(p.name || p.identity)); });
       await lkRoom.connect(msg.url, msg.token);
       window.__voiceRoom = lkRoom; // test hook
       // never auto-publish: the mic only goes live from an explicit F2 / button press
-      if (voiceWanted) announce(t('voiceOn'));
+      if (voiceWanted) { announce(t('voiceOn')); addRoomLine(t('logVoiceSelf')); }
     } catch (e) {
       lkRoom = null;
       if (!voiceWanted) return;
@@ -267,10 +298,12 @@
       case 'penalized': announce(t('penalized')(msg.action)); break;
       case 'announcement': announce(t('announcementFrom')(msg.from, msg.text)); break;
       case 'mod_notice': announce(t('modReport')(msg.by, msg.name)); break;
-      case 'error':
-        if (!state.table && $('view-table').hidden) $('login-status').textContent = terr(msg.code);
-        announce(terr(msg.code));
+      case 'error': {
+        const text = msg.code === 'need_players' ? t('needPlayersCount')(msg.active, msg.min) : terr(msg.code);
+        if (!state.table && $('view-table').hidden) $('login-status').textContent = text;
+        announce(text);
         break;
+      }
       case 'client_old':
         announce(t('clientOld'));
         break;
@@ -278,6 +311,7 @@
       case 'friends': renderFriends(msg.friends); break;
       case 'joined':
         state.table = msg.table;
+        if ($('room-log')) $('room-log').innerHTML = '';
         // every table join starts muted; only an explicit press enables the mic
         state.mic = false;
         $('mic-button').setAttribute('aria-pressed', 'false');
@@ -300,6 +334,15 @@
         break;
       }
       case 'chat': addChatLine(msg.from, msg.text); break;
+      case 'table_log': renderRoomLog(msg.log || []); break;
+      case 'table_log_event': appendRoomLog(msg.ev); break;
+      case 'kicked':
+        state.table = null;
+        state.game = null;
+        leaveVoice();
+        show('lobby');
+        announce(msg.banned ? t('youWereKickBanned')(msg.table || '') : t('youWereKicked')(msg.table || ''));
+        break;
       case 'adv_event': window.ADV.onEvent(msg); break;
       case 'adv_left': window.ADV.onLeft(); break;
       case 'pm': {
@@ -339,17 +382,82 @@
     }
   }
 
-  // ---------- lobby games menu: pick a game, it opens a table for it ----------
-  document.querySelectorAll('[data-lobby-game]').forEach(b => {
-    b.addEventListener('click', () => {
-      state.pendingGame = b.dataset.lobbyGame;
-      send({ type: 'create_table', name: t(GAME_KEY[b.dataset.lobbyGame] || 'gameFarkle') });
-    });
-  });
-  const GAME_KEY = { farkle: 'gameFarkle', dominoes: 'gameDominoes', snakes: 'gameSnakes' };
+  // ---------- lobby games menu (Cycle A): filter button on top, then per-kind rows ----------
+  // views: 'main' (filter row + kind rows or filtered table rows), 'filter' (the filter choices),
+  // 'kind' (create on top, that kind's tables, back last)
+  state.lobbyView = 'main';
+  state.lobbyFilter = 'all';
+  state.lobbyKind = null;
+  const KIND_KEYS = { farkle: 'gameFarkle', dominoes: 'gameDominoes', snakes: 'gameSnakes', chat: 'gameChatRoom' };
+  const KIND_ORDER = ['farkle', 'dominoes', 'snakes', 'chat'];
+  function kindTables(kind) { return lastTables.filter(tb => (tb.kind || 'farkle') === kind); }
+  function tableRowText(tb) {
+    const gname = t(KIND_KEYS[tb.kind || 'farkle']);
+    const status = tb.playing ? t('statusPlaying') : t('statusWaiting');
+    const friend = (lastFriends || []).find(f => f.online && tb.players.includes(f.name));
+    return t('tableRow')(gname, status, tb.name, tb.players.length, friend ? friend.name : null);
+  }
+  function mkMenuBtn(text, onClick, disabled) {
+    const b = document.createElement('button');
+    b.textContent = text;
+    b.tabIndex = -1;
+    if (disabled) { b.setAttribute('aria-disabled', 'true'); b.addEventListener('click', () => announce(t('comingSoon'))); }
+    else b.addEventListener('click', onClick);
+    return b;
+  }
+  function renderLobbyMenu(refocus) {
+    const box = $('lobby-games-menu');
+    if (!box) return;
+    const hadFocus = box.contains(document.activeElement);
+    box.innerHTML = '';
+    const add = b => box.appendChild(b);
+    if (state.lobbyView === 'filter') {
+      for (const f of ['all', 'waiting', 'playing', 'saved']) {
+        add(mkMenuBtn(t('filterName_' + f), () => {
+          state.lobbyFilter = f;
+          state.lobbyView = 'main';
+          announce(t('filterNow')(t('filterName_' + f)));
+          renderLobbyMenu(true);
+        }));
+      }
+      add(mkMenuBtn(t('back'), () => { state.lobbyView = 'main'; renderLobbyMenu(true); }));
+    } else if (state.lobbyView === 'kind' && state.lobbyKind) {
+      const kind = state.lobbyKind;
+      add(mkMenuBtn(t('createTableBtn'), () => {
+        send({ type: 'create_table', name: t(KIND_KEYS[kind]), game: kind });
+      }));
+      for (const tb of kindTables(kind)) {
+        add(mkMenuBtn(tableRowText(tb), () => send({ type: 'join_table', id: tb.id })));
+      }
+      add(mkMenuBtn(t('back'), () => { state.lobbyView = 'main'; state.lobbyKind = null; renderLobbyMenu(true); }));
+    } else {
+      add(mkMenuBtn(t('filterButton')(t('filterName_' + state.lobbyFilter)), () => {
+        state.lobbyView = 'filter';
+        renderLobbyMenu(true);
+      }));
+      if (state.lobbyFilter === 'all') {
+        for (const kind of KIND_ORDER) {
+          add(mkMenuBtn(t('kindRow')(t(KIND_KEYS[kind]), kindTables(kind).length), () => {
+            state.lobbyView = 'kind';
+            state.lobbyKind = kind;
+            renderLobbyMenu(true);
+          }));
+        }
+      } else if (state.lobbyFilter === 'saved') {
+        add(mkMenuBtn(t('noSavedTables'), null, true));
+      } else {
+        const wantPlaying = state.lobbyFilter === 'playing';
+        const rows = lastTables.filter(tb => !!tb.playing === wantPlaying);
+        if (!rows.length) add(mkMenuBtn(t('noTablesFilter'), null, true));
+        for (const tb of rows) add(mkMenuBtn(tableRowText(tb), () => send({ type: 'join_table', id: tb.id })));
+      }
+    }
+    if (refocus || hadFocus) { const b = box.querySelector('button'); if (b) setTimeout(() => b.focus(), 0); }
+  }
+  window.renderLobbyMenu = renderLobbyMenu;
 
   // ---------- vertical-menu model: Tab lands on a menu container, Up/Down + Enter inside ----------
-  const menuScopeOf = a => a && a.closest ? a.closest('#game-view, #game-menu-buttons, #lobby-games-menu') : null;
+  const menuScopeOf = a => a && a.closest ? a.closest('#game-view, #game-menu-buttons, #lobby-games-menu, #table-menu-buttons') : null;
   const menuButtons = scope => [...scope.querySelectorAll('button:not([hidden])')].filter(b => b.getAttribute('aria-disabled') !== 'true' && !b.disabled && b.id !== 'end-game-button');
   document.addEventListener('keydown', ev => {
     if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
@@ -385,10 +493,104 @@
     }
   });
 
+  // ---------- Escape context menu (owner gets the full version, order per Ahmed's spec) ----------
+  function openTableMenu() {
+    const dlg = $('table-menu-dialog');
+    const box = $('table-menu-buttons');
+    const tb = state.table;
+    if (!dlg || !box || !tb) return;
+    const isHost = tb.host === state.name || state.role === 'owner' || state.role === 'mod';
+    $('table-menu-h').textContent = t('roomMenuTitle');
+    box.innerHTML = '';
+    const item = (key, fn, disabled) => {
+      const b = document.createElement('button');
+      b.textContent = t(key);
+      b.tabIndex = -1;
+      if (disabled) { b.setAttribute('aria-disabled', 'true'); b.addEventListener('click', () => announce(t('comingSoon'))); }
+      else b.addEventListener('click', () => { dlg.close(); fn(); });
+      box.appendChild(b);
+    };
+    const noGame = (tb.kind || 'farkle') === 'chat';
+    if (isHost) {
+      if (!noGame) item('miStart', () => send({ type: 'start_game' }));
+      item('miWhoIsOn', () => announce(t('playersList')(tb.players.join('، '))));
+      if (!noGame) item('miGameOptions', null, true);
+      if (!noGame) item('miAddBot', () => send({ type: 'add_bot' }));
+      if (!noGame) item('miRemoveBot', () => send({ type: 'remove_bot' }));
+      if (!noGame) item('miReplacePlayer', null, true);
+      item('miMakePrivate', null, true);
+      item('miSaveRoom', null, true); // cycle B
+      item('miInviteFriend', null, true);
+      item('miHostMgmt', () => openHostMenu());
+      item('miShareDeviceAudio', null, true);
+      item('miShareClip', null, true);
+      if (!noGame) item('miGameInfo', () => announce(t('gameInfoLine')(t(KIND_KEYS[tb.kind || 'farkle']), tb.min, tb.max)));
+      if (!noGame) item('miHowToPlay', null, true);
+      item('miLeaveRoom', () => send({ type: 'leave_table' }));
+    } else {
+      if (!noGame) item('miStart', () => send({ type: 'start_game' }));
+      item('miWhoIsOn', () => announce(t('playersList')(tb.players.join('، '))));
+      if (!noGame) item('miGameInfo', () => announce(t('gameInfoLine')(t(KIND_KEYS[tb.kind || 'farkle']), tb.min, tb.max)));
+      if (!noGame) item('miHowToPlay', null, true);
+      item('miLeaveRoom', () => send({ type: 'leave_table' }));
+    }
+    dlg.showModal();
+    const b = box.querySelector('button');
+    if (b) setTimeout(() => b.focus(), 0);
+  }
+  function openHostMenu() {
+    // إدارة المضيف submenu: make private, invite, replace, transfer host, kick, kick+ban, back
+    const dlg = $('table-menu-dialog');
+    const box = $('table-menu-buttons');
+    if (!dlg.open) dlg.showModal();
+    $('table-menu-h').textContent = t('miHostMgmt');
+    box.innerHTML = '';
+    const item = (key, fn, disabled) => {
+      const b = document.createElement('button');
+      b.textContent = t(key);
+      b.tabIndex = -1;
+      if (disabled) { b.setAttribute('aria-disabled', 'true'); b.addEventListener('click', () => announce(t('comingSoon'))); }
+      else b.addEventListener('click', fn);
+      box.appendChild(b);
+    };
+    item('miMakePrivate', null, true);
+    item('miInviteFriend', null, true);
+    item('miReplacePlayer', null, true);
+    item('miTransferHost', () => openPlayerPicker('transfer_host'));
+    item('miKick', () => openPlayerPicker('kick_player'));
+    item('miKickBan', () => openPlayerPicker('kick_ban_player'));
+    item('back', () => { dlg.close(); openTableMenu(); });
+    const b = box.querySelector('button');
+    if (b) setTimeout(() => b.focus(), 0);
+  }
+  function openPlayerPicker(action) {
+    const dlg = $('table-menu-dialog');
+    const box = $('table-menu-buttons');
+    if (!dlg.open) dlg.showModal();
+    const tb = state.table;
+    $('table-menu-h').textContent = t('pickPlayer');
+    box.innerHTML = '';
+    for (const p of (tb ? tb.players : [])) {
+      if (p === state.name) continue;
+      const b = document.createElement('button');
+      b.textContent = p;
+      b.tabIndex = -1;
+      b.addEventListener('click', () => { dlg.close(); send({ type: action, name: p }); });
+      box.appendChild(b);
+    }
+    const back = document.createElement('button');
+    back.textContent = t('back');
+    back.tabIndex = -1;
+    back.addEventListener('click', () => { dlg.close(); openTableMenu(); });
+    box.appendChild(back);
+    const b = box.querySelector('button');
+    if (b) setTimeout(() => b.focus(), 0);
+  }
+
   // ---------- one screen per area (Playroom model): Tab switches screens ----------
   // Only the active screen is in the DOM buffer, so NVDA browse mode reads
   // exactly one area top to bottom, never the whole page.
-  const SCREENS = ['screen-game', 'screen-log', 'screen-chat', 'screen-table'];
+  const SCREENS = ['screen-game', 'screen-chat', 'screen-log', 'screen-table'];
   function screenMainEl(id) {
     if (id === 'screen-game') return $('farkle-primary') || $('game-view').querySelector('button:not([hidden])') || $('game-menu-buttons').querySelector('button') || $('game-view');
     if (id === 'screen-log') return $('farkle-log') || $('game-log-holder');
@@ -434,7 +636,7 @@
   });
 
   // ---------- lobby screens: same one-screen-per-area model ----------
-  const LOBBY_SCREENS = ['screen-lobby-games', 'screen-lobby-adventure', 'screen-lobby-tables', 'screen-lobby-friends', 'screen-lobby-report', 'screen-lobby-block', 'screen-lobby-admin'];
+  const LOBBY_SCREENS = ['screen-lobby-games', 'screen-lobby-tables', 'screen-lobby-friends', 'screen-lobby-report', 'screen-lobby-block', 'screen-lobby-admin'];
   function lobbyScreensAvailable() {
     const mod = state.role === 'mod' || state.role === 'owner';
     return LOBBY_SCREENS.filter(id => id !== 'screen-lobby-admin' || mod);
@@ -442,7 +644,6 @@
   function lobbyScreenMainEl(id) {
     switch (id) {
       case 'screen-lobby-games': return $('lobby-games-menu').querySelector('button');
-      case 'screen-lobby-adventure': return $('adv-enter-button');
       case 'screen-lobby-tables': return $('table-name-input');
       case 'screen-lobby-friends': return $('friend-name');
       case 'screen-lobby-report': return $('report-name');
@@ -504,7 +705,7 @@
   $('login-code-button').addEventListener('click', () => { $('login-code-text').textContent = ''; send({ type: 'login_code' }); });
 
   // ---------- settings: jump to a lobby screen ----------
-  const GOTO_SCREEN = { 'goto-games': 'screen-lobby-games', 'goto-adventure': 'screen-lobby-adventure', 'goto-tables': 'screen-lobby-tables', 'goto-friends': 'screen-lobby-friends', 'goto-report': 'screen-lobby-report', 'goto-block': 'screen-lobby-block', 'goto-admin': 'screen-lobby-admin' };
+  const GOTO_SCREEN = { 'goto-games': 'screen-lobby-games', 'goto-tables': 'screen-lobby-tables', 'goto-friends': 'screen-lobby-friends', 'goto-report': 'screen-lobby-report', 'goto-block': 'screen-lobby-block', 'goto-admin': 'screen-lobby-admin' };
   for (const [btn, screen] of Object.entries(GOTO_SCREEN)) {
     $(btn).addEventListener('click', () => {
       $('settings-dialog').close();
@@ -595,7 +796,8 @@
       const etag = ev.target && ev.target.tagName;
       if (!$('view-table').hidden) {
         if (etag === 'INPUT' || etag === 'TEXTAREA') return;
-        send({ type: 'leave_table' });
+        ev.preventDefault();
+        openTableMenu();
       } else if (!$('view-lobby').hidden) {
         ev.preventDefault();
         showLobbyScreen('screen-lobby-games');
