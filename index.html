@@ -23,6 +23,12 @@
 
   <section id="view-lobby" aria-labelledby="lobby-h" hidden>
     <h2 id="lobby-h" data-i18n="lobbyTitle"></h2>
+    <h3 data-i18n="gamesMenuHeading"></h3>
+    <div id="lobby-games-menu" class="menu-vertical" role="group" aria-label="games">
+      <button data-lobby-game="farkle" data-i18n="gameFarkle"></button>
+      <button data-lobby-game="dominoes" data-i18n="gameDominoes"></button>
+      <button data-lobby-game="snakes" data-i18n="gameSnakes"></button>
+    </div>
     <p><button id="adv-enter-button" data-i18n="advEnter"></button></p>
     <p><button id="rules-button" data-i18n="rulesButton"></button></p>
     <form id="create-form">
@@ -121,11 +127,7 @@
       <h3 id="game-h" data-i18n="gameHeading"></h3>
       <div id="game-menu">
         <p data-i18n="startGamePrompt"></p>
-        <div class="table-actions">
-          <button data-start-game="farkle"></button>
-          <button data-start-game="dominoes"></button>
-          <button data-start-game="snakes"></button>
-        </div>
+        <div id="game-menu-buttons" class="menu-vertical"></div>
       </div>
       <div id="game-view" hidden></div>
     </section>
@@ -133,7 +135,7 @@
     <div id="chat-log" role="log" aria-live="polite" aria-label="chat"></div>
     <form id="chat-form">
       <label for="chat-input" data-i18n="chatLabel"></label>
-      <input id="chat-input" maxlength="500" autocomplete="off" tabindex="3">
+      <input id="chat-input" maxlength="500" autocomplete="off">
       <button type="submit" data-i18n="sendButton"></button>
     </form>
   </section>
