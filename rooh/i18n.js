@@ -168,6 +168,8 @@ const STRINGS = {
     addBot: 'ضيف بوت (B)',
     // روح المغامرة
     advEnter: 'روح المغامرة',
+    haveCodeLabel: 'كود الدخول (اختياري)',
+    haveCodeHint: 'لو اسمك متسجل في تطبيق العب مع المصري: افتح الإعدادات هناك واضغط أظهر كود الدخول، واكتب الكود هنا مع اسمك عشان تدخل بنفس الحساب.',
     advLobbyHint: 'اضغط الزر عشان تدخل العالم. جوه العالم: الأسهم يمين وشمال للمشي، سهم فوق للقفز، الأرقام من 1 لـ 6 و8 لقوة القفز، G مع سهم للاستكشاف، Enter لدخول الأماكن، W مكانك، O المتواجدين، F أصحابك المتواجدين، T رسالة خاصة، Escape للخروج.',
     advTitle: 'روح المغامرة',
     advLeave: 'اخرج من العالم (Escape)',
@@ -278,7 +280,9 @@ const STRINGS = {
     roleChanged: 'صلاحياتك اتغيرت',
     errors: {
       bad_name: 'الاسم ده مش ينفع.',
-      name_taken: 'الاسم ده محجوز. لو ده اسمك، افتح من نفس الجهاز اللي سجلت منه.',
+      name_taken: 'الاسم ده محجوز. لو ده اسمك، استخدم كود الدخول من إعدادات التطبيق اللي سجلت منه.',
+      bad_code: 'كود الدخول غلط. اتأكد من الرقم وجرب تاني.',
+      code_expired: 'كود الدخول خلصت مدته. اطلب كود جديد من الإعدادات.',
       already_online: 'الاسم ده مفتوح دلوقتي من جهاز تاني.',
       table_full: 'الترابيزة دي مليانة (10 لاعبين).',
       no_table: 'الترابيزة دي مش موجودة.',
@@ -465,6 +469,8 @@ const STRINGS = {
     addBot: 'Add bot (B)',
     // Spirit of Adventure
     advEnter: 'Spirit of Adventure',
+    haveCodeLabel: 'Login code (optional)',
+    haveCodeHint: 'If your name is registered in the Laeb Ma Al Masry app: open Settings there, press Show my login code, and enter the code here with your name to use the same account.',
     advLobbyHint: 'Press the button to enter the world. Inside: Left and Right arrows walk, Up jumps, digits 1 to 6 and 8 set jump power, hold G with an arrow to explore, Enter enters places, W says where you are, O lists who is online, F lists your online friends, T starts a private message, Escape leaves.',
     advTitle: 'Spirit of Adventure',
     advLeave: 'Leave the world (Escape)',
@@ -575,7 +581,9 @@ const STRINGS = {
     roleChanged: 'Your permissions changed',
     errors: {
       bad_name: 'That name is not allowed.',
-      name_taken: 'That name is taken. If it is yours, sign in from the device you used before.',
+      name_taken: 'That name is taken. If it is yours, use a login code from the Settings of the app you registered in.',
+      bad_code: 'Wrong login code. Check the number and try again.',
+      code_expired: 'That login code has expired. Ask for a new one from Settings.',
       already_online: 'That name is already signed in on another device.',
       table_full: 'That table is full (10 players).',
       no_table: 'That table no longer exists.',
