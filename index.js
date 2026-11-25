@@ -177,6 +177,8 @@ function livekitToken(identity, name, room) {
   return header + '.' + payload + '.' + sig;
 }
 
+const CLIENT_VERSION = 'v5-2026-11-25';
+
 const handlers = {
   hello(o, msg) {
     const key = lowerName(msg.name);
@@ -194,6 +196,8 @@ const handlers = {
     o.user = user;
     online.set(user.id, o);
     send(o.ws, { type: 'welcome', id: user.id, name: user.name, token: user.token, role: roleOf(user) });
+    console.log(`[version] ${user.name} client=${msg.version || 'unknown'} server=${CLIENT_VERSION}`);
+    if (msg.version !== CLIENT_VERSION) send(o.ws, { type: 'client_old', server: CLIENT_VERSION });
     if (!user.sawRules) send(o.ws, { type: 'rules' });
     send(o.ws, tablesPayload());
     send(o.ws, friendsPayload(user));
