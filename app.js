@@ -20,7 +20,7 @@
   window.announce = m => announce(m);
   window.send = obj => send(obj);
   window.notifPlay = () => notifAudio.play().catch(() => {});
-  const CLIENT_VERSION = 'v8-2026-11-26';
+  const CLIENT_VERSION = 'v9-2026-11-26';
   window.CLIENT_VERSION = CLIENT_VERSION;
   const t = key => STRINGS[state.lang][key];
   const terr = code => (STRINGS[state.lang].errors[code]) || code;
