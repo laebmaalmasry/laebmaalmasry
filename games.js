@@ -286,11 +286,13 @@
       g._hotKey = rollKey;
       setTimeout(() => announce(t('hotDice')), 400);
     } else if (becameMine) announce(t('yourTurn'));
-    // the heart of v5: on your turn, every state change lands focus on the
-    // primary button, so NVDA speaks the next instruction and Enter does it
+    // the heart of v5: on your turn, focus lives on the primary button, so
+    // NVDA speaks the next instruction and Enter does it. Re-renders destroy
+    // the focused node (view.innerHTML is rebuilt), so restore on EVERY
+    // render during your turn, not only on phase changes.
     const a = document.activeElement;
     const focusInGame = !a || a === document.body || view.contains(a) || a.id === 'chat-input';
-    if (mine && stateChanged && focusInGame) setTimeout(() => primary.focus(), 60);
+    if (mine && focusInGame) setTimeout(() => { const p = $('farkle-primary'); if (p) p.focus(); }, 60);
   }
 
   if (!window.__farkleKeysBound) {
