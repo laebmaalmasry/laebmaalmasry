@@ -126,10 +126,11 @@
     view.appendChild(el('p', (mine ? t('yourTurn') + ' — ' : '') + t('turnOf')(s.currentPlayer)));
   }
 
-  // ---------- Farkle v3: Playroom-style keyboard layout ----------
-  // Design: role=application panel (keys reach the page like QuentinC's Playroom),
-  // stable DOM, surgical updates on selection, focus restore on phase changes.
-  const FARKLE_VERSION = 'farkle-v3-2026-11-25';
+  // ---------- Farkle v4: exact tab order Ahmed asked for ----------
+  // Tab 1 = dice listbox (game area), Tab 2 = log (arrows read it), Tab 3 = chat input
+  // (chat-input carries tabindex=3 in index.html). No role=application: NVDA browse
+  // mode renders it as an empty landmark, which hid the dice from Ahmed in v3.
+  const FARKLE_VERSION = 'farkle-v4-2026-11-25';
   window.FARKLE_VERSION = FARKLE_VERSION;
 
   function farkleSelPoints(g, dice) {
@@ -177,10 +178,11 @@
       kb.setAttribute('aria-disabled', en ? 'false' : 'true');
     }
   }
-  function farkleToggleDie(g, dice, i, btn) {
+  function farkleToggleDie(g, dice, i) {
     if (!isMyTurn() || state.game.state.phase !== 'deciding') return;
     if (g.sel.has(i)) g.sel.delete(i); else g.sel.add(i);
-    btn.setAttribute('aria-pressed', String(g.sel.has(i)));
+    const opt = document.getElementById('farkle-die-' + i);
+    if (opt) opt.setAttribute('aria-selected', String(g.sel.has(i)));
     sfx(keepAudio);
     const pts = farkleSelPoints(g, dice);
     let msg = g.sel.has(i) ? t('diePicked')(dice[i], pts) : t('dieUnpicked')(dice[i], pts);
@@ -210,7 +212,8 @@
     const myIdx = myIndex();
     const dice = s.lastRoll || [];
     const rollKey = s.turn + ':' + s.turnPoints + ':' + dice.join(',');
-    if (g.selKey !== rollKey) { g.sel = new Set(); g.selKey = rollKey; }
+    if (g.selKey !== rollKey) { g.sel = new Set(); g.selKey = rollKey; g.dieCursor = 0; }
+    if (g.dieCursor == null || g.dieCursor >= dice.length) g.dieCursor = 0;
     const selPts = farkleSelPoints(g, dice);
     const phaseKey = s.turn + ':' + s.phase + ':' + dice.length + ':' + (s.farkled ? 1 : 0);
     const becameMine = mine && g._prevMine !== true;
@@ -222,34 +225,42 @@
     scoreList(view, s);
     view.appendChild(el('p', t('targetLine')(s.target || D.target)));
 
-    const app = el('section', null, { role: 'application', 'aria-label': t('gameRegion'), id: 'farkle-app' });
-    view.appendChild(app);
+    const panel = el('section', null, { 'aria-label': t('gameRegion'), id: 'farkle-panel' });
+    view.appendChild(panel);
 
-    app.appendChild(el('h5', t('stateHeading')));
-    app.appendChild(el('p', (mine ? t('yourTurn') + '. ' : '') + t('turnOf')(s.currentPlayer)));
-    app.appendChild(el('p', t('turnPoints')(s.turnPoints)));
-    app.appendChild(el('p', t('diceLeft')(s.diceLeft)));
-    app.appendChild(el('p', t('farkleKeys'), { class: 'farkle-keys-hint' }));
+    panel.appendChild(el('h5', t('stateHeading')));
+    panel.appendChild(el('p', (mine ? t('yourTurn') + '. ' : '') + t('turnOf')(s.currentPlayer)));
+    panel.appendChild(el('p', t('turnPoints')(s.turnPoints)));
+    panel.appendChild(el('p', t('diceLeft')(s.diceLeft)));
+    panel.appendChild(el('p', t('farkleKeys'), { class: 'farkle-keys-hint', id: 'farkle-keys-hint' }));
 
-    app.appendChild(el('h5', t('diceHeading')));
-    const diceRow = el('div', null, { role: 'group', 'aria-label': t('diceHeading'), id: 'farkle-dice' });
-    app.appendChild(diceRow);
-    if (!dice.length) diceRow.appendChild(el('p', t('noDiceYet')));
-    dice.forEach((d, i) => {
-      const b = el('button', String(d), { 'aria-pressed': g.sel.has(i) ? 'true' : 'false', class: 'die', 'data-die': String(i) });
-      b.addEventListener('click', () => farkleToggleDie(g, dice, i, b));
-      diceRow.appendChild(b);
+    panel.appendChild(el('h5', t('diceHeading')));
+    const lb = el('div', null, {
+      role: 'listbox', id: 'farkle-dice', tabindex: '1',
+      'aria-label': t('diceHeading'), 'aria-multiselectable': 'true',
+      'aria-describedby': 'farkle-keys-hint'
     });
+    panel.appendChild(lb);
+    if (!dice.length) {
+      lb.appendChild(el('div', t('noDiceYet'), { role: 'option', id: 'farkle-die-empty', 'aria-disabled': 'true', 'aria-selected': 'false' }));
+      lb.setAttribute('aria-activedescendant', 'farkle-die-empty');
+    }
+    dice.forEach((d, i) => {
+      const o = el('div', String(d), { role: 'option', id: 'farkle-die-' + i, class: 'die', 'aria-selected': g.sel.has(i) ? 'true' : 'false' });
+      o.addEventListener('click', () => { g.dieCursor = i; farkleToggleDie(g, dice, i); });
+      lb.appendChild(o);
+    });
+    if (dice.length) lb.setAttribute('aria-activedescendant', 'farkle-die-' + g.dieCursor);
 
-    app.appendChild(el('h5', t('selectedHeading')));
-    app.appendChild(el('p', null, { id: 'farkle-sel-summary' }));
+    panel.appendChild(el('h5', t('selectedHeading')));
+    panel.appendChild(el('p', null, { id: 'farkle-sel-summary' }));
     farkleUpdateSelLater(g, dice);
 
-    app.appendChild(el('h5', t('actionsHeading')));
+    panel.appendChild(el('h5', t('actionsHeading')));
     const actions = el('div', null, { class: 'table-actions', id: 'farkle-actions' });
-    app.appendChild(actions);
+    panel.appendChild(actions);
     const mkBtn = (id, label, enabled, handler, key) => {
-      const b = el('button', label, { id, 'aria-disabled': enabled ? 'false' : 'true', 'aria-keyshortcuts': key });
+      const b = el('button', label, { id, tabindex: '-1', 'aria-disabled': enabled ? 'false' : 'true', 'aria-keyshortcuts': key });
       b.addEventListener('click', () => { if (b.getAttribute('aria-disabled') === 'true') return; handler(); });
       actions.appendChild(b);
       return b;
@@ -260,19 +271,24 @@
     mkBtn('farkle-ok', t('okBtn'), mine && s.phase === 'over', () => farkleSend('endTurnAfterFarkle'), 'enter');
 
     view.appendChild(el('h5', t('logHeading')));
-    const logEl = el('ul', null, { role: 'log', 'aria-live': 'off', id: 'farkle-log' });
-    (g.log || []).forEach(line => logEl.appendChild(el('li', line)));
+    const logEl = el('div', null, { role: 'listbox', id: 'farkle-log', tabindex: '2', 'aria-label': t('logHeading') });
+    const entries = g.log || [];
+    if (!entries.length) {
+      logEl.appendChild(el('div', t('logEmpty'), { role: 'option', id: 'farkle-log-empty', 'aria-selected': 'false' }));
+    }
+    entries.forEach((line, i) => logEl.appendChild(el('div', line, { role: 'option', id: 'farkle-log-' + i, 'aria-selected': 'false' })));
+    if (entries.length) {
+      if (g.logCursor == null || g.logCursor >= entries.length) g.logCursor = entries.length - 1;
+      logEl.setAttribute('aria-activedescendant', 'farkle-log-' + g.logCursor);
+    }
     view.appendChild(logEl);
     view.appendChild(el('p', FARKLE_VERSION, { class: 'farkle-version' }));
 
-    if (becameMine) announce(t('yourTurn'));
-    if (mine && phaseChanged && farkleFocusOk()) {
-      let target = null;
-      if (s.phase === 'deciding') target = diceRow.querySelector('button');
-      else if (s.phase === 'must_roll') target = $('farkle-roll');
-      else if (s.phase === 'over') target = $('farkle-ok');
-      if (target) setTimeout(() => target.focus(), 50);
-    }
+    if (!g._versionSaid) {
+      g._versionSaid = true;
+      setTimeout(() => announce(t('farkleVersionSay')), 900);
+    } else if (becameMine) announce(t('yourTurn'));
+    if (mine && phaseChanged && farkleFocusOk()) setTimeout(() => lb.focus(), 50);
   }
   function farkleUpdateSelLater(g, dice) { setTimeout(() => farkleUpdateSel(g, dice), 0); }
 
@@ -285,29 +301,47 @@
       const tag = (tgt.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tgt.isContentEditable) return;
       const k = (e.key || '').toLowerCase();
+      const s = g.state;
+      const dice = s.lastRoll || [];
+
+      if (tgt.id === 'farkle-dice') {
+        if (k === 'arrowleft' || k === 'arrowright' || k === 'arrowup' || k === 'arrowdown') {
+          e.preventDefault();
+          if (!dice.length) return;
+          const d = (k === 'arrowright' || k === 'arrowdown') ? 1 : -1;
+          g.dieCursor = Math.min(dice.length - 1, Math.max(0, (g.dieCursor || 0) + d));
+          tgt.setAttribute('aria-activedescendant', 'farkle-die-' + g.dieCursor);
+          return;
+        }
+        if (k === 'home') { e.preventDefault(); g.dieCursor = 0; tgt.setAttribute('aria-activedescendant', 'farkle-die-0'); return; }
+        if (k === 'end') { e.preventDefault(); g.dieCursor = dice.length - 1; tgt.setAttribute('aria-activedescendant', 'farkle-die-' + g.dieCursor); return; }
+        if (k === ' ') { e.preventDefault(); if (dice.length) farkleToggleDie(g, dice, g.dieCursor || 0); return; }
+      }
+      if (tgt.id === 'farkle-log' && (k === 'arrowup' || k === 'arrowdown')) {
+        e.preventDefault();
+        const n = (g.log || []).length;
+        if (!n) return;
+        const cur = g.logCursor == null ? n - 1 : g.logCursor;
+        g.logCursor = k === 'arrowdown' ? Math.min(n - 1, cur + 1) : Math.max(0, cur - 1);
+        tgt.setAttribute('aria-activedescendant', 'farkle-log-' + g.logCursor);
+        return;
+      }
+
       if (k === 'enter') {
-        if (tag === 'button' && !tgt.classList.contains('die')) return; // native activation
+        if (tag === 'button') return; // native button activation
         e.preventDefault();
         farklePrimary();
         return;
       }
-      if ((k === 'arrowleft' || k === 'arrowright') && tgt.classList && tgt.classList.contains('die')) {
-        const row = $('farkle-dice');
-        if (!row) return;
-        const btns = [...row.querySelectorAll('button')];
-        const n = btns.indexOf(tgt) + (k === 'arrowright' ? 1 : -1);
-        if (btns[n]) { e.preventDefault(); btns[n].focus(); }
-        return;
-      }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (k === 'c') { e.preventDefault(); announce(t('sayTurnPts')(g.state.turnPoints, g.state.diceLeft)); }
+      if (k === 'c') { e.preventDefault(); announce(t('sayTurnPts')(s.turnPoints, s.diceLeft)); }
       else if (k === 'd') {
         e.preventDefault();
         const heard = g._lastRoll || [];
         announce(heard.length ? t('lastRollSay')(heard.join(' ')) : t('noLastRoll'));
       }
-      else if (k === 's') { e.preventDefault(); announce(g.state.players.map((p, i) => t('scoreLine')(p, g.state.scores[i])).join('. ')); }
-      else if (k === 't') { e.preventDefault(); announce(t('turnOf')(g.state.currentPlayer)); }
+      else if (k === 's') { e.preventDefault(); announce(s.players.map((p, i) => t('scoreLine')(p, s.scores[i])).join('. ')); }
+      else if (k === 't') { e.preventDefault(); announce(t('turnOf')(s.currentPlayer)); }
       else if (k === 'b') { e.preventDefault(); farkleTryBank(); }
       else if (k === 'r' || k === 'k') { e.preventDefault(); farklePrimary(); }
     });
