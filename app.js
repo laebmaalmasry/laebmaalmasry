@@ -20,7 +20,7 @@
   window.announce = m => announce(m);
   window.send = obj => send(obj);
   window.notifPlay = () => notifAudio.play().catch(() => {});
-  const CLIENT_VERSION = 'v6-2026-11-25';
+  const CLIENT_VERSION = 'v7-2026-11-25';
   window.CLIENT_VERSION = CLIENT_VERSION;
   const t = key => STRINGS[state.lang][key];
   const terr = code => (STRINGS[state.lang].errors[code]) || code;
@@ -60,6 +60,7 @@
   function show(view) {
     for (const v of ['login', 'lobby', 'table', 'world']) $('view-' + v).hidden = v !== view;
     if (view === 'table' && window.showScreen) window.showScreen('screen-game', true);
+    if (view === 'lobby') showLobbyScreen('screen-lobby-games', true);
     const focusTarget = { login: 'login-name', lobby: 'lobby-games-menu', table: 'game-menu-buttons', world: 'adv-focus' }[view];
     const el = $(focusTarget);
     if (el) { const b = el.tagName === 'BUTTON' ? el : el.querySelector('button'); if (b) { b.focus(); return; } if (el.tabIndex >= 0) { el.focus(); return; } }
@@ -346,6 +347,18 @@
     if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
     const a = document.activeElement;
     if (!a) return;
+    // lobby screens: Up/Down is one vertical menu of every control on the screen
+    const lobbyScreen = $('view-lobby').hidden ? null : (a.closest && a.closest('.lobby-screen'));
+    if (lobbyScreen) {
+      const ctrls = [...lobbyScreen.querySelectorAll('button, input, select')].filter(el => !el.disabled && !el.closest('[hidden]'));
+      if (ctrls.length < 2) return;
+      ev.preventDefault();
+      let i = ctrls.indexOf(a);
+      if (i < 0) i = ev.key === 'ArrowDown' ? -1 : 0;
+      const next = ev.key === 'ArrowDown' ? (i + 1) % ctrls.length : (i - 1 + ctrls.length) % ctrls.length;
+      ctrls[next].focus();
+      return;
+    }
     if (a.tagName === 'BUTTON') {
       const scope = menuScopeOf(a);
       if (!scope) return;
@@ -384,14 +397,60 @@
   window.showScreen = showScreen;
   document.addEventListener('keydown', ev => {
     if (ev.key !== 'Tab') return;
-    if ($('view-table').hidden) return;
     if (document.querySelector('dialog[open]')) return;
-    ev.preventDefault();
-    const cur = SCREENS.find(id => !$(id).hidden) || 'screen-game';
-    let i = SCREENS.indexOf(cur);
-    i = ev.shiftKey ? (i - 1 + SCREENS.length) % SCREENS.length : (i + 1) % SCREENS.length;
-    showScreen(SCREENS[i]);
+    if (!$('view-table').hidden) {
+      ev.preventDefault();
+      const cur = SCREENS.find(id => !$(id).hidden) || 'screen-game';
+      let i = SCREENS.indexOf(cur);
+      i = ev.shiftKey ? (i - 1 + SCREENS.length) % SCREENS.length : (i + 1) % SCREENS.length;
+      showScreen(SCREENS[i]);
+    } else if (!$('view-lobby').hidden) {
+      ev.preventDefault();
+      const avail = lobbyScreensAvailable();
+      const cur = avail.find(id => !$(id).hidden) || 'screen-lobby-games';
+      let i = avail.indexOf(cur);
+      i = ev.shiftKey ? (i - 1 + avail.length) % avail.length : (i + 1) % avail.length;
+      showLobbyScreen(avail[i]);
+    }
   });
+
+  // Left/Right changes the value of a select inside a lobby screen (Up/Down keep the menu rules)
+  document.addEventListener('keydown', ev => {
+    if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+    const a = document.activeElement;
+    if (!a || a.tagName !== 'SELECT') return;
+    if ($('view-lobby').hidden || !a.closest('.lobby-screen')) return;
+    ev.preventDefault();
+    const d = ev.key === 'ArrowRight' ? 1 : -1;
+    a.selectedIndex = (a.selectedIndex + d + a.options.length) % a.options.length;
+  });
+
+  // ---------- lobby screens: same one-screen-per-area model ----------
+  const LOBBY_SCREENS = ['screen-lobby-games', 'screen-lobby-adventure', 'screen-lobby-tables', 'screen-lobby-friends', 'screen-lobby-report', 'screen-lobby-block', 'screen-lobby-admin'];
+  function lobbyScreensAvailable() {
+    const mod = state.role === 'mod' || state.role === 'owner';
+    return LOBBY_SCREENS.filter(id => id !== 'screen-lobby-admin' || mod);
+  }
+  function lobbyScreenMainEl(id) {
+    switch (id) {
+      case 'screen-lobby-games': return $('lobby-games-menu').querySelector('button');
+      case 'screen-lobby-adventure': return $('adv-enter-button');
+      case 'screen-lobby-tables': return $('table-name-input');
+      case 'screen-lobby-friends': return $('friend-name');
+      case 'screen-lobby-report': return $('report-name');
+      case 'screen-lobby-block': return $('block-name');
+      case 'screen-lobby-admin': return $('admin-name');
+    }
+    return null;
+  }
+  function showLobbyScreen(id, silent) {
+    if (!lobbyScreensAvailable().includes(id)) id = 'screen-lobby-games';
+    LOBBY_SCREENS.forEach(x => { $(x).hidden = x !== id; });
+    if (!silent) announce(t('screenName_' + id.slice('screen-lobby-'.length)));
+    const target = lobbyScreenMainEl(id);
+    if (target) setTimeout(() => target.focus(), 0);
+  }
+  window.showLobbyScreen = showLobbyScreen;
 
   // when Tab lands on a menu container, go straight to the useful button
   ['game-view', 'game-menu-buttons', 'lobby-games-menu'].forEach(id => {
@@ -432,17 +491,32 @@
   $('leave-button').addEventListener('click', () => send({ type: 'leave_table' }));
   $('mic-button').addEventListener('click', () => setMic(!state.mic));
   $('bot-button').addEventListener('click', () => send({ type: 'add_bot' }));
-  $('settings-button').addEventListener('click', () => $('settings-dialog').showModal());
+  $('settings-button').addEventListener('click', () => { $('screens-fieldset').hidden = true; $('settings-dialog').showModal(); });
+
+  // ---------- settings: jump to a lobby screen ----------
+  const GOTO_SCREEN = { 'goto-games': 'screen-lobby-games', 'goto-adventure': 'screen-lobby-adventure', 'goto-tables': 'screen-lobby-tables', 'goto-friends': 'screen-lobby-friends', 'goto-report': 'screen-lobby-report', 'goto-block': 'screen-lobby-block', 'goto-admin': 'screen-lobby-admin' };
+  for (const [btn, screen] of Object.entries(GOTO_SCREEN)) {
+    $(btn).addEventListener('click', () => {
+      $('settings-dialog').close();
+      if (!$('view-lobby').hidden) showLobbyScreen(screen);
+    });
+  }
+  $('goto-rules').addEventListener('click', () => {
+    $('settings-dialog').close();
+    renderRules();
+    $('rules-dialog').showModal();
+    $('rules-body').focus();
+  });
 
   // ---------- moderation UI ----------
   function applyRole() {
     const mod = state.role === 'mod' || state.role === 'owner';
-    $('admin-panel').hidden = !mod;
     $('owner-form').hidden = state.role !== 'owner';
     $('announce-form').hidden = state.role !== 'owner';
+    $('goto-admin').hidden = !mod;
+    if (!mod && !$('screen-lobby-admin').hidden) showLobbyScreen('screen-lobby-games', true);
   }
   function renderRules() { $('rules-body').innerHTML = t('rulesHtml'); }
-  $('rules-button').addEventListener('click', () => { renderRules(); $('rules-dialog').showModal(); $('rules-body').focus(); });
   $('rules-form').addEventListener('submit', () => send({ type: 'accept_rules' }));
   $('report-form').addEventListener('submit', ev => {
     ev.preventDefault();
@@ -500,13 +574,22 @@
     } else if (ev.key === 'F10') {
       ev.preventDefault();
       const d = $('settings-dialog');
-      if (d.open) d.close(); else d.showModal();
+      if (d.open) d.close(); else { $('screens-fieldset').hidden = $('view-lobby').hidden; d.showModal(); }
+    } else if (ev.key === 'F9') {
+      if (state.role !== 'mod' && state.role !== 'owner') return;
+      if ($('view-lobby').hidden) return;
+      ev.preventDefault();
+      showLobbyScreen('screen-lobby-admin');
     } else if (ev.key === 'Escape') {
       if (document.querySelector('dialog[open]')) return;
-      if ($('view-table').hidden) return;
       const etag = ev.target && ev.target.tagName;
-      if (etag === 'INPUT' || etag === 'TEXTAREA') return;
-      send({ type: 'leave_table' });
+      if (!$('view-table').hidden) {
+        if (etag === 'INPUT' || etag === 'TEXTAREA') return;
+        send({ type: 'leave_table' });
+      } else if (!$('view-lobby').hidden) {
+        ev.preventDefault();
+        showLobbyScreen('screen-lobby-games');
+      }
     } else if (ev.key === 'F2') {
       ev.preventDefault();
       setMic(!state.mic);
