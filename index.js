@@ -582,7 +582,18 @@ async function createServer(port = 0) {
     });
   });
   const wss = new WebSocketServer({ server });
+  // heartbeat: proxies may drop quiet connections; ping every 25s and reap dead sockets
+  const beat = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (ws.isAlive === false) { try { ws.terminate(); } catch {} continue; }
+      ws.isAlive = false;
+      try { ws.ping(); } catch {}
+    }
+  }, 25000);
+  wss.on('close', () => clearInterval(beat));
   wss.on('connection', ws => {
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
     const o = { ws, user: null, tableId: null };
     ws.on('message', raw => {
       let msg;
