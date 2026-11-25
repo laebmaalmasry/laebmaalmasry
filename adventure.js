@@ -10,7 +10,7 @@
   const send = o => window.send(o);
 
   const sounds = {};
-  for (const n of ['step', 'jump', 'splash', 'wind', 'pm', 'place', 'power', 'enter', 'edge', 'online']) {
+  for (const n of ['step', 'jump', 'splash', 'wind', 'pm', 'place', 'power', 'enter', 'edge', 'online', 'land_ground', 'land_bridge', 'land_grass', 'land_tree']) {
     sounds[n] = new Audio(n + '.ogg');
   }
   function play(name) {
@@ -51,7 +51,12 @@
       case 'blocked_edge': play('edge'); announce(t('advBlockedEdge')); break;
       case 'splash': play('splash'); announce(t('advSplash')); break;
       case 'jump_splash': play('splash'); announce(t('advJumpSplash')); break;
-      case 'jumped': play('jump'); announce(t('advJumped')(ev.power, ev.x)); break;
+      case 'jumped': {
+        play('jump');
+        const land = { ground: 'land_ground', bridge: 'land_bridge', grass: 'land_grass', tree: 'land_tree' }[ev.surface] || 'land_ground';
+        setTimeout(() => play(land), 450);
+        break;
+      }
       case 'power': play('power'); announce(t('advPower')(ev.power)); break;
       case 'explore_ground': {
         const ms = playTimes('wind', ev.steps);
