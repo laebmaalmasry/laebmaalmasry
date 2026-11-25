@@ -155,7 +155,7 @@
   // after every server state change so NVDA speaks what to do next.
   // Model studied live from the RS Games web client (status history + vertical
   // choice buttons) and QuentinC Playroom docs; no listbox, no Enter interception.
-  const FARKLE_VERSION = 'farkle-v6-2026-11-25';
+  const FARKLE_VERSION = 'farkle-v7-2026-11-25';
   window.FARKLE_VERSION = FARKLE_VERSION;
 
   function farkleSelPoints(g, dice) {
