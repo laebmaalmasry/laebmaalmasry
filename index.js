@@ -577,7 +577,14 @@ async function createServer(port = 0) {
     if (!file.startsWith(CLIENT_DIR)) { res.writeHead(403); return res.end(); }
     fs.readFile(file, (e, data) => {
       if (e) { res.writeHead(404); return res.end('not found'); }
-      res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+      // code files must revalidate every load (app shells cache them on disk);
+      // media can be cached for a day. ETag makes revalidations cheap 304s.
+      const ext = path.extname(file);
+      const st = fs.statSync(file);
+      const etag = '"' + st.size + '-' + Math.floor(st.mtimeMs).toString(36) + '"';
+      if (req.headers['if-none-match'] === etag) { res.writeHead(304); return res.end(); }
+      const cc = ['.html', '.js', '.mjs', '.css'].includes(ext) ? 'no-cache' : 'public, max-age=86400';
+      res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cc, ETag: etag });
       res.end(data);
     });
   });
