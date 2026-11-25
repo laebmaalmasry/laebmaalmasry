@@ -20,6 +20,7 @@ const STRINGS = {
     chatLabel: 'اكتب رسالة',
     sendButton: 'ابعت',
     loginCodeLegend: 'كود الدخول',
+    loginCodeLabel: 'كود الدخول (سيبه فاضي لو ده جهازك المعتاد)',
     loginCodeButton: 'أظهر كود الدخول',
     loginCodeIs: (code, minutes) => `كود الدخول بتاعك: ${code}. شغال ${minutes} دقايق وبيشتغل مرة واحدة بس. اكتبه مع اسمك في التطبيق التاني.`,
     settingsTitle: 'الإعدادات',
@@ -280,7 +281,7 @@ const STRINGS = {
     roleChanged: 'صلاحياتك اتغيرت',
     errors: {
       bad_name: 'الاسم ده مش ينفع.',
-      name_taken: 'الاسم ده محجوز. لو ده اسمك، افتح من نفس الجهاز اللي سجلت منه، أو استخدم كود الدخول من الإعدادات.',
+      name_taken: 'الاسم ده محجوز. لو ده اسمك، افتح من نفس الجهاز اللي سجلت منه، أو اكتب كود الدخول في الخانة اللي تحت الاسم وجرب تاني.',
       bad_code: 'كود الدخول غلط. اتأكد من الرقم وجرب تاني.',
       code_expired: 'كود الدخول خلصت مدته. اطلب كود جديد من الإعدادات.',
       session_taken: 'حسابك اتفتح من تطبيق تاني، فاتقفل من هنا.',
@@ -322,6 +323,7 @@ const STRINGS = {
     chatLabel: 'Type a message',
     sendButton: 'Send',
     loginCodeLegend: 'Login code',
+    loginCodeLabel: 'Login code (leave empty on your usual device)',
     loginCodeButton: 'Show my login code',
     loginCodeIs: (code, minutes) => `Your login code: ${code}. Valid for ${minutes} minutes and works once. Enter it with your name in the other app.`,
     settingsTitle: 'Settings',
@@ -582,7 +584,7 @@ const STRINGS = {
     roleChanged: 'Your permissions changed',
     errors: {
       bad_name: 'That name is not allowed.',
-      name_taken: 'That name is taken. If it is yours, sign in from the device you used before, or use a login code from Settings.',
+      name_taken: 'That name is taken. If it is yours, sign in from the device you used before, or type your login code in the box under the name and try again.',
       bad_code: 'Wrong login code. Check the number and try again.',
       code_expired: 'That login code has expired. Ask for a new one from Settings.',
       session_taken: 'Your account was opened from another app, so it was closed here.',
