@@ -46,7 +46,16 @@ function broadcastGameState(t) {
 
 const CLIENT_DIR = __dirname;
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data.json');
-const MAX_PLAYERS = 10;
+const MAX_PLAYERS = 20; // hard ceiling; each table kind applies its own cap
+// Cycle A: per-game tables with their own limits (design doc v2)
+const TABLE_GAMES = {
+  farkle:   { min: 2, max: 20 },
+  snakes:   { min: 2, max: 20 },
+  dominoes: { min: 2, max: 12 }, // engine scales the set: double-6 / double-9 / double-12
+  chat:     { min: 1, max: 20 }, // غرفة الدردشة: voice + chat only, no game
+};
+// bots get Egyptian character names instead of "Bot 1"
+const BOT_NAMES = ['الذئب الودود', 'القطة مشمشة', 'الأسد شهريار', 'الثعلب رشيق', 'العصفورة زيزي', 'السلحفاة متولي', 'القرد بتبيت', 'الغزالة سوسن', 'البومة نور', 'الحصان عنتر', 'التمساح جابر', 'الأرنب رنود', 'الصقر بسيوني', 'السلوقي همام', 'القنفذ فطوطة', 'الغراب زغلول', 'الديك مرزوق', 'الكسلان حمودة', 'الدولفين لولو', 'النمر شيكا'];
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json' };
 
 // ---------- persistence ----------
@@ -136,10 +145,13 @@ function lowerName(name) { return String(name || '').trim().replace(/\s+/g, ' ')
 
 function memberName(t, id) { return online.get(id)?.user.name || t.botNames[id] || usersName(id); }
 function publicTable(t) {
+  const g = TABLE_GAMES[t.kind] || TABLE_GAMES.farkle;
   return {
-    id: t.id, name: t.name,
+    id: t.id, name: t.name, kind: t.kind,
     players: t.playerIds.map(id => memberName(t, id)),
-    max: MAX_PLAYERS,
+    min: g.min, max: g.max,
+    playing: !!t.game,
+    host: memberName(t, t.hostId),
   };
 }
 function usersName(id) {
@@ -153,6 +165,13 @@ function broadcastTable(t, msg, exceptId) {
 }
 function broadcastLobby(msg) {
   for (const [id, o] of online) if (!o.tableId) send(o.ws, msg);
+}
+// room log: full history of the table (creation with limits, joins, leaves, kicks, host moves)
+function logEvent(t, ev) {
+  ev.ts = Date.now();
+  t.log.push(ev);
+  if (t.log.length > 200) t.log.splice(0, t.log.length - 200);
+  broadcastTable(t, { type: 'table_log_event', ev });
 }
 function tablesPayload() { return { type: 'tables', tables: [...tables.values()].map(publicTable) }; }
 function friendsPayload(user) {
@@ -238,11 +257,14 @@ const handlers = {
   create_table(o, msg) {
     if (!o.user) return;
     if (o.tableId) return err(o.ws, 'already_in_table');
+    const kind = TABLE_GAMES[msg.game] ? msg.game : 'farkle';
     const name = String(msg.name || '').trim().slice(0, 40) || o.user.name;
-    const t = { id: nextTableId++, name, playerIds: [o.user.id], botIds: new Set(), botNames: {}, botSeq: 0, botTimer: null };
+    const t = { id: nextTableId++, name, kind, hostId: o.user.id, banned: new Set(), log: [], playerIds: [o.user.id], botIds: new Set(), botNames: {}, botSeq: 0, botTimer: null };
     tables.set(t.id, t);
     o.tableId = t.id;
     send(o.ws, { type: 'joined', table: publicTable(t) });
+    logEvent(t, { k: 'created', name: o.user.name, kind, min: TABLE_GAMES[kind].min, max: TABLE_GAMES[kind].max });
+    send(o.ws, { type: 'table_log', log: t.log });
     broadcastLobby(tablesPayload());
   },
   list_tables(o) { send(o.ws, tablesPayload()); },
@@ -251,10 +273,13 @@ const handlers = {
     if (o.tableId) return err(o.ws, 'already_in_table');
     const t = tables.get(Number(msg.id));
     if (!t) return err(o.ws, 'no_table');
-    if (t.playerIds.length >= MAX_PLAYERS) return err(o.ws, 'table_full');
+    if ((t.banned || new Set()).has(lowerName(o.user.name))) return err(o.ws, 'kicked');
+    if (t.playerIds.length >= (TABLE_GAMES[t.kind] ? TABLE_GAMES[t.kind].max : MAX_PLAYERS)) return err(o.ws, 'table_full');
     t.playerIds.push(o.user.id);
     o.tableId = t.id;
     send(o.ws, { type: 'joined', table: publicTable(t) });
+    send(o.ws, { type: 'table_log', log: t.log });
+    logEvent(t, { k: 'joined', name: o.user.name });
     if (t.game) send(o.ws, { type: 'game_started', ...gamePublicState(t), spectator: true });
     broadcastTable(t, { type: 'table_update', table: publicTable(t) }, o.user.id);
     broadcastLobby(tablesPayload());
@@ -284,11 +309,14 @@ const handlers = {
     if (!o.user || !o.tableId) return err(o.ws, 'not_in_table');
     const t = tables.get(o.tableId);
     if (!t) return err(o.ws, 'not_in_table');
-    if (t.playerIds.length < 2) return err(o.ws, 'need_players');
-    const Engine = ENGINES[msg.game];
+    if (t.kind === 'chat') return err(o.ws, 'chat_no_game');
+    if (msg.game && msg.game !== t.kind) return err(o.ws, 'wrong_game');
+    const g = TABLE_GAMES[t.kind] || TABLE_GAMES.farkle;
+    if (t.playerIds.length < g.min) return send(o.ws, { type: 'error', code: 'need_players', active: t.playerIds.length, min: g.min });
+    const Engine = ENGINES[t.kind];
     if (!Engine) return err(o.ws, 'unknown_game');
     const names = t.playerIds.map(id => memberName(t, id));
-    t.game = { id: msg.game, instance: new Engine(names) };
+    t.game = { id: t.kind, instance: new Engine(names) };
     broadcastTable(t, { type: 'game_started', ...gamePublicState(t) });
     if (t.game.id === 'dominoes') {
       t.playerIds.forEach((pid, idx) => sendToUser(pid, { type: 'game_hand', game: 'dominoes', hand: t.game.instance.handOf(idx) }));
@@ -327,23 +355,70 @@ const handlers = {
     t.game = null;
     broadcastTable(t, { type: 'game_ended' });
   },
+  remove_bot(o) {
+    if (!o.user || !o.tableId) return err(o.ws, 'not_in_table');
+    const t = tables.get(o.tableId);
+    if (!canManageTable(o, t)) return err(o.ws, 'not_host');
+    const botId = [...t.botIds].pop();
+    if (!botId) return err(o.ws, 'no_such_user');
+    const name = t.botNames[botId];
+    t.playerIds = t.playerIds.filter(x => x !== botId);
+    t.botIds.delete(botId);
+    delete t.botNames[botId];
+    logEvent(t, { k: 'left', name });
+    broadcastTable(t, { type: 'table_update', table: publicTable(t) });
+    broadcastLobby(tablesPayload());
+  },
   add_bot(o) {
     if (!o.user || !o.tableId) return err(o.ws, 'not_in_table');
     const t = tables.get(o.tableId);
     if (!t) return err(o.ws, 'not_in_table');
-    if (t.playerIds.length >= MAX_PLAYERS) return err(o.ws, 'table_full');
+    if (t.playerIds.length >= (TABLE_GAMES[t.kind] ? TABLE_GAMES[t.kind].max : MAX_PLAYERS)) return err(o.ws, 'table_full');
     const id = 'bot-' + crypto.randomUUID();
     let name;
-    do { name = 'Bot ' + (++t.botSeq); } while (t.playerIds.some(pid => memberName(t, pid) === name));
+    const used = new Set(t.playerIds.map(pid => memberName(t, pid)));
+    const free = BOT_NAMES.filter(n => !used.has(n));
+    if (free.length) name = free[Math.floor(Math.random() * free.length)];
+    else do { name = 'Bot ' + (++t.botSeq); } while (used.has(name));
     t.playerIds.push(id);
     t.botIds.add(id);
     t.botNames[id] = name;
+    logEvent(t, { k: 'joined', name });
     if (t.game) {
       try { t.game.instance.addPlayer(name); } catch (e) { return err(o.ws, 'game:' + (e.message || 'failed')); }
       broadcastGameState(t);
     }
     broadcastTable(t, { type: 'table_update', table: publicTable(t) });
     maybeBotTurn(t);
+  },
+  transfer_host(o, msg) {
+    if (!o.user || !o.tableId) return err(o.ws, 'not_in_table');
+    const t = tables.get(o.tableId);
+    if (!canManageTable(o, t)) return err(o.ws, 'not_host');
+    const target = users[lowerName(msg.name)];
+    if (!target || !t.playerIds.includes(target.id) || t.botIds.has(target.id)) return err(o.ws, 'no_such_user');
+    t.hostId = target.id;
+    logEvent(t, { k: 'host', name: target.name });
+    broadcastTable(t, { type: 'table_update', table: publicTable(t), notice: 'host_transferred', name: target.name });
+    broadcastLobby(tablesPayload());
+  },
+  kick_player(o, msg) {
+    if (!o.user || !o.tableId) return err(o.ws, 'not_in_table');
+    const t = tables.get(o.tableId);
+    if (!canManageTable(o, t)) return err(o.ws, 'not_host');
+    const target = users[lowerName(msg.name)];
+    const tid = target ? target.id : t.playerIds.find(id => memberName(t, id) === String(msg.name || '').trim());
+    if (!tid || !t.playerIds.includes(tid) || tid === o.user.id) return err(o.ws, 'no_such_user');
+    kickFromTable(t, tid, false);
+  },
+  kick_ban_player(o, msg) {
+    if (!o.user || !o.tableId) return err(o.ws, 'not_in_table');
+    const t = tables.get(o.tableId);
+    if (!canManageTable(o, t)) return err(o.ws, 'not_host');
+    const target = users[lowerName(msg.name)];
+    const tid = target ? target.id : t.playerIds.find(id => memberName(t, id) === String(msg.name || '').trim());
+    if (!tid || !t.playerIds.includes(tid) || tid === o.user.id) return err(o.ws, 'no_such_user');
+    kickFromTable(t, tid, true);
   },
   voice_join(o) {
     if (!o.user || !o.tableId) return err(o.ws, 'not_in_table');
@@ -593,15 +668,50 @@ function leaveTable(o) {
   send(o.ws, tablesPayload());
   if (!t) return;
   t.playerIds = t.playerIds.filter(id => id !== o.user.id);
+  logEvent(t, { k: 'left', name: o.user.name });
   // a player leaving mid-game ends the game for the table
   if (t.game && t.game.instance.players.includes(o.user.name)) {
     t.game = null;
     clearTimeout(t.botTimer);
     broadcastTable(t, { type: 'game_ended', reason: 'player_left', player: o.user.name });
   }
+  if (t.hostId === o.user.id) {
+    const nextHuman = t.playerIds.find(id => !t.botIds.has(id));
+    t.hostId = nextHuman || null;
+  }
   const humansLeft = t.playerIds.some(id => !t.botIds.has(id));
   if (!humansLeft) { clearTimeout(t.botTimer); tables.delete(t.id); }
   else broadcastTable(t, { type: 'table_update', table: publicTable(t) });
+  broadcastLobby(tablesPayload());
+}
+// host management (Cycle A): the table host - or an owner/mod - can transfer
+// hosting, kick a player, or kick+ban them from the table
+function canManageTable(o, t) { return o.user && t && (t.hostId === o.user.id || isMod(o.user)); }
+function kickFromTable(t, targetId, ban) {
+  const to = online.get(targetId);
+  const name = memberName(t, targetId);
+  if (ban) t.banned.add(lowerName(name));
+  logEvent(t, { k: ban ? 'kickban' : 'kick', name });
+  if (t.botIds.has(targetId)) {
+    t.playerIds = t.playerIds.filter(id => id !== targetId);
+    t.botIds.delete(targetId);
+    delete t.botNames[targetId];
+  } else if (to) {
+    to.tableId = null;
+    t.playerIds = t.playerIds.filter(id => id !== targetId);
+    send(to.ws, { type: 'kicked', table: t.name, banned: !!ban });
+    send(to.ws, tablesPayload());
+  }
+  if (t.game && t.game.instance.players.includes(name)) {
+    t.game = null;
+    clearTimeout(t.botTimer);
+    broadcastTable(t, { type: 'game_ended', reason: 'player_left', player: name });
+  }
+  if (t.hostId === targetId) {
+    const nextHuman = t.playerIds.find(id => !t.botIds.has(id));
+    t.hostId = nextHuman || null;
+  }
+  broadcastTable(t, { type: 'table_update', table: publicTable(t) });
   broadcastLobby(tablesPayload());
 }
 
