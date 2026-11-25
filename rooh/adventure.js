@@ -11,7 +11,8 @@
 
   const sounds = {};
   for (const n of ['step', 'jump', 'splash', 'wind', 'pm', 'place', 'power', 'enter', 'edge', 'online', 'land_ground', 'land_bridge', 'land_grass', 'land_tree']) {
-    sounds[n] = new Audio('https://ruby-ranger-5880.de.deplexo.com/' + n + '.ogg');
+    const embedded = window.LAND_SOUNDS && window.LAND_SOUNDS[n];
+    sounds[n] = new Audio(embedded || 'https://ruby-ranger-5880.de.deplexo.com/' + n + '.ogg');
   }
   function play(name) {
     const a = sounds[name];
