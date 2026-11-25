@@ -28,16 +28,7 @@
     <p id="lobby-screen-hint" data-i18n="lobbyScreenHint"></p>
     <div id="screen-lobby-games" class="lobby-screen">
       <h3 data-i18n="gamesMenuHeading"></h3>
-      <div id="lobby-games-menu" class="menu-vertical" role="group" aria-label="games" tabindex="0">
-        <button tabindex="-1" data-lobby-game="farkle" data-i18n="gameFarkle"></button>
-        <button tabindex="-1" data-lobby-game="dominoes" data-i18n="gameDominoes"></button>
-        <button tabindex="-1" data-lobby-game="snakes" data-i18n="gameSnakes"></button>
-      </div>
-    </div>
-    <div id="screen-lobby-adventure" class="lobby-screen" hidden>
-      <h3 data-i18n="advTitle"></h3>
-      <p data-i18n="advScreenDesc"></p>
-      <p><button id="adv-enter-button" data-i18n="advEnter"></button></p>
+      <div id="lobby-games-menu" class="menu-vertical" role="group" aria-label="games" tabindex="0"></div>
     </div>
     <div id="screen-lobby-tables" class="lobby-screen" hidden>
       <h3 data-i18n="tablesHeading"></h3>
@@ -130,6 +121,10 @@
     </form>
   </section>
 
+  <dialog id="table-menu-dialog" aria-labelledby="table-menu-h">
+    <h3 id="table-menu-h"></h3>
+    <div id="table-menu-buttons" class="menu-vertical" tabindex="0"></div>
+  </dialog>
   <section id="view-table" aria-labelledby="table-h" hidden>
     <h2 id="table-h"></h2>
     <p id="screen-hint" data-i18n="screenHint"></p>
@@ -145,6 +140,7 @@
     </div>
     <div id="screen-log" class="table-screen" hidden>
       <h3 data-i18n="logHeading"></h3>
+      <div id="room-log" role="log" aria-live="off" tabindex="-1"></div>
       <div id="game-log-holder"></div>
     </div>
     <div id="screen-chat" class="table-screen" hidden>
@@ -184,7 +180,6 @@
       <legend data-i18n="screensLegend"></legend>
       <div class="menu-vertical">
         <button type="button" id="goto-games" data-i18n="gotoGames"></button>
-        <button type="button" id="goto-adventure" data-i18n="gotoAdventure"></button>
         <button type="button" id="goto-tables" data-i18n="gotoTables"></button>
         <button type="button" id="goto-friends" data-i18n="gotoFriends"></button>
         <button type="button" id="goto-report" data-i18n="gotoReport"></button>
