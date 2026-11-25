@@ -177,7 +177,7 @@ function livekitToken(identity, name, room) {
   return header + '.' + payload + '.' + sig;
 }
 
-const CLIENT_VERSION = 'v7-2026-11-25';
+const CLIENT_VERSION = 'v8-2026-11-26';
 
 const handlers = {
   hello(o, msg) {
@@ -185,7 +185,14 @@ const handlers = {
     if (!key || key.length > 24) return err(o.ws, 'bad_name');
     let user = users[key];
     if (user) {
-      if (user.token !== msg.token) return err(o.ws, 'name_taken');
+      if (user.token !== msg.token) {
+        // one-time login code bridge: name + valid code issues the token to a new app/device
+        const c = String(msg.code || '').trim();
+        if (!c) return err(o.ws, 'name_taken');
+        if (!user.loginCode || user.loginCode.code !== c) return err(o.ws, 'bad_code');
+        if (user.loginCode.expires <= Date.now()) { user.loginCode = null; return err(o.ws, 'code_expired'); }
+        user.loginCode = null; // single use
+      }
       if (online.has(user.id)) return err(o.ws, 'already_online');
       if (user.banUntil === 'perm' || (user.banUntil && user.banUntil > Date.now())) return err(o.ws, 'banned');
     } else {
@@ -374,6 +381,14 @@ const handlers = {
     if (t) send(t.ws, out);
     else send(o.ws, { type: 'pm_offline', to: target.name });
   },
+  // ---------- login code bridge ----------
+  login_code(o) {
+    if (!o.user) return;
+    const code = String(crypto.randomInt(100000, 1000000));
+    o.user.loginCode = { code, expires: Date.now() + 10 * 60 * 1000 };
+    send(o.ws, { type: 'login_code', code, minutes: 10 });
+  },
+
   // ---------- rules, reporting, personal mute ----------
   accept_rules(o) {
     if (!o.user) return;
