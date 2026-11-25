@@ -10,6 +10,12 @@ const AREAS = {
     nameKey: 'areaTown',
     width: 200,
     spawn: 5,
+    // surface zones (x ranges inclusive) - anything outside them is plain ground
+    surfaces: [
+      { from: 30, to: 44, kind: 'grass' },   // جنينة
+      { from: 75, to: 95, kind: 'bridge' },  // كوبري خشب
+      { from: 130, to: 149, kind: 'tree' },  // شجرة
+    ],
     gaps: [
       { from: 20, to: 22 },   // 3 wide
       { from: 45, to: 49 },   // 5
@@ -47,6 +53,13 @@ function groundAt(area, x) {
 function placeAt(area, x) {
   const a = AREAS[area];
   return (a && a.places.find(p => p.x === x)) || null;
+}
+function surfaceAt(area, x) {
+  const a = AREAS[area];
+  if (!a || x < 0 || x >= a.width) return null;
+  if (groundAt(area, x) === false) return 'water';
+  for (const s of (a.surfaces || [])) if (x >= s.from && x <= s.to) return s.kind;
+  return 'ground';
 }
 
 class WorldEngine {
@@ -128,7 +141,7 @@ class WorldEngine {
     }
     p.x = target;
     const events = [
-      { to: id, kind: 'jumped', from, x: p.x, power: p.power },
+      { to: id, kind: 'jumped', from, x: p.x, power: p.power, surface: surfaceAt(p.area, p.x) },
       { to: 'area', area: p.area, except: id, kind: 'player_move', name: p.name, x: p.x, moveKind: 'jump' },
     ];
     this._arriveEvents(p, events);
@@ -175,4 +188,4 @@ class WorldEngine {
   }
 }
 
-module.exports = { WorldEngine, AREAS, VALID_POWERS, groundAt, placeAt };
+module.exports = { WorldEngine, AREAS, VALID_POWERS, groundAt, placeAt, surfaceAt };
