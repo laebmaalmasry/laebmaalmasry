@@ -5,6 +5,38 @@
   const $ = id => document.getElementById(id);
   const GAME_NAMES = { farkle: 'gameFarkle', dominoes: 'gameDominoes', snakes: 'gameSnakes' };
   const tileText = tile => t('tileFmt')(tile[0], tile[1]);
+  // dice sounds synthesized with WebAudio: no audio files to ship
+  let actx = null;
+  function beep(freq, dur, type, gain) {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = type || 'sine'; o.frequency.value = freq;
+      g.gain.setValueAtTime(gain || 0.25, actx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + dur);
+      o.connect(g).connect(actx.destination);
+      o.start(); o.stop(actx.currentTime + dur);
+    } catch {}
+  }
+  function rattle(dur) {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const n = Math.floor(actx.sampleRate * dur);
+      const buf = actx.createBuffer(1, n, actx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (Math.random() < 0.12 ? 1 : 0.15);
+      const src = actx.createBufferSource(); src.buffer = buf;
+      const f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 3200; f.Q.value = 0.8;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.6, actx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + dur);
+      src.connect(f).connect(g).connect(actx.destination);
+      src.start();
+    } catch {}
+  }
+  const rollAudio = { play: () => { rattle(0.7); return { catch() {} }; }, currentTime: 0 };
+  const keepAudio = { play: () => { beep(740, 0.12, 'sine', 0.3); return { catch() {} }; }, currentTime: 0 };
+  const sfx = a => { try { a.play(); } catch {} };
 
   function el(tag, text, attrs) {
     const e = document.createElement(tag);
@@ -29,8 +61,9 @@
     let text = null;
     if (g === 'farkle') {
       if (msg.action === 'roll') {
+        sfx(rollAudio);
         text = r.farkled ? t('farkled')(by) : t('rolledDice')(by, (r.dice || []).join(' '));
-      } else if (msg.action === 'setAside') text = t('setAsidePts')(by, r.points);
+      } else if (msg.action === 'setAside') { sfx(keepAudio); text = t('setAsidePts')(by, r.points); }
       else if (msg.action === 'bank') text = r.winner ? t('wins')(by) : t('bankedPts')(by, r.banked);
       else if (msg.action === 'endTurnAfterFarkle') text = null; // covered by the farkle roll
     } else if (g === 'dominoes') {
@@ -93,23 +126,39 @@
 
   function renderFarkle(view, g, s) {
     scoreList(view, s);
+    view.appendChild(el('h5', t('turnInfo')));
     turnLine(view, s);
     view.appendChild(el('p', `${t('turnPoints')(s.turnPoints)}. ${t('diceLeft')(s.diceLeft)}.`));
-    if (s.lastRoll && s.lastRoll.length) {
-      const group = el('div', null, { role: 'group', 'aria-label': 'dice' });
-      g.selected = g.selected && g.selectedTurn === s.turnPoints + ':' + s.lastRoll.join() ? g.selected : new Set();
-      g.selectedTurn = s.turnPoints + ':' + s.lastRoll.join();
-      s.lastRoll.forEach((d, i) => {
-        const b = el('button', String(d), { 'aria-pressed': g.selected.has(i) ? 'true' : 'false', class: 'die' });
-        b.addEventListener('click', () => {
-          if (g.selected.has(i)) g.selected.delete(i); else g.selected.add(i);
-          b.setAttribute('aria-pressed', String(g.selected.has(i)));
-        });
-        group.appendChild(b);
+    const dice = s.lastRoll || [];
+    g.selected = g.selected && g.selectedTurn === s.turnPoints + ':' + dice.join() ? g.selected : new Set();
+    g.selectedTurn = s.turnPoints + ':' + dice.join();
+    // kept dice: their own section so kept dice leave the available list
+    view.appendChild(el('h5', t('keptDice')));
+    const kept = el('div', null, { role: 'group', 'aria-label': t('keptDice'), id: 'farkle-kept' });
+    view.appendChild(kept);
+    view.appendChild(el('h5', t('availableDice')));
+    const avail = el('div', null, { role: 'group', 'aria-label': t('availableDice'), id: 'farkle-avail' });
+    view.appendChild(avail);
+    const syncEmpty = () => {
+      const ph = kept.querySelector('.kept-empty');
+      const n = kept.querySelectorAll('button').length;
+      if (n === 0 && !ph) kept.appendChild(el('p', t('keptEmpty'), { class: 'kept-empty' }));
+      else if (n > 0 && ph) ph.remove();
+    };
+    dice.forEach((d, i) => {
+      const b = el('button', String(d), { 'aria-pressed': g.selected.has(i) ? 'true' : 'false', class: 'die' });
+      b.addEventListener('click', () => {
+        if (g.selected.has(i)) { g.selected.delete(i); avail.appendChild(b); }
+        else { g.selected.add(i); kept.appendChild(b); sfx(keepAudio); }
+        b.setAttribute('aria-pressed', String(g.selected.has(i)));
+        syncEmpty();
       });
-      view.appendChild(group);
-    }
+      (g.selected.has(i) ? kept : avail).appendChild(b);
+    });
+    if (!dice.length) avail.appendChild(el('p', t('noDiceYet')));
+    syncEmpty();
     if (isMyTurn()) {
+      view.appendChild(el('h5', t('actionsHeading')));
       const actions = el('div', null, { class: 'table-actions' });
       if (s.phase === 'must_roll') {
         const rb = el('button', t('rollDice'), { id: 'roll-button' });
