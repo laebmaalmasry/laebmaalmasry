@@ -118,6 +118,7 @@
     if (/^[1-68]$/.test(k) && k !== '7') { ev.preventDefault(); send({ type: 'world_action', action: 'power', power: Number(k) }); return; }
     const code = ev.code;
     if (code === 'KeyW') { ev.preventDefault(); send({ type: 'world_action', action: 'where' }); return; }
+    if (code === 'KeyC') { ev.preventDefault(); send({ type: 'login_code' }); return; } // hear a one-time login code
     if (code === 'KeyO') { ev.preventDefault(); send({ type: 'world_action', action: 'online' }); return; }
     if (code === 'KeyF') {
       ev.preventDefault();
