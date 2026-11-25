@@ -105,6 +105,7 @@
       if (box) {
         box.innerHTML = '';
         const bot = el('button', t('addBotMenu'), { id: 'menu-add-bot' });
+        bot.tabIndex = -1;
         bot.addEventListener('click', () => { send({ type: 'add_bot' }); });
         box.appendChild(bot);
         const order = ['farkle', 'dominoes', 'snakes'];
@@ -112,6 +113,7 @@
         if (pend && order.includes(pend)) { order.splice(order.indexOf(pend), 1); order.unshift(pend); }
         for (const id of order) {
           const b = el('button', t('startGameBtn')(t(GAME_NAMES[id])), { 'data-start-game': id });
+          b.tabIndex = -1;
           b.addEventListener('click', () => send({ type: 'start_game', game: id }));
           box.appendChild(b);
         }
