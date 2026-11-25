@@ -340,7 +340,7 @@
 
   // ---------- vertical-menu model: Tab lands on a menu container, Up/Down + Enter inside ----------
   const menuScopeOf = a => a && a.closest ? a.closest('#game-view, #game-menu-buttons, #lobby-games-menu') : null;
-  const menuButtons = scope => [...scope.querySelectorAll('button:not([hidden])')].filter(b => b.getAttribute('aria-disabled') !== 'true' && !b.disabled);
+  const menuButtons = scope => [...scope.querySelectorAll('button:not([hidden])')].filter(b => b.getAttribute('aria-disabled') !== 'true' && !b.disabled && b.id !== 'end-game-button');
   document.addEventListener('keydown', ev => {
     if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
     const a = document.activeElement;
