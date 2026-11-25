@@ -192,6 +192,16 @@ const handlers = {
         if (!user.loginCode || user.loginCode.code !== c) return err(o.ws, 'bad_code');
         if (user.loginCode.expires <= Date.now()) { user.loginCode = null; return err(o.ws, 'code_expired'); }
         user.loginCode = null; // single use
+        // a valid code proves ownership: take over any existing session of this account
+        const old = online.get(user.id);
+        if (old && old.ws !== o.ws) {
+          send(old.ws, { type: 'error', code: 'session_taken' });
+          leaveTable(old);
+          if (old.inWorld) { old.inWorld = false; routeWorldEvents(world.leave(user.id)); }
+          online.delete(user.id);
+          old.user = null; // the old socket's own drop handler becomes a no-op
+          try { old.ws.close(); } catch {}
+        }
       }
       if (online.has(user.id)) return err(o.ws, 'already_online');
       if (user.banUntil === 'perm' || (user.banUntil && user.banUntil > Date.now())) return err(o.ws, 'banned');
