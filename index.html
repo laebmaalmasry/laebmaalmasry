@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>العب مع المصري</title>
-<link rel="stylesheet" href="styles.css?v=70">
+<link rel="stylesheet" href="styles.css?v=80">
 </head>
 <body>
 <header>
@@ -201,6 +201,11 @@
       <label><input type="checkbox" id="notif-toggle"> <span data-i18n="notifLabel"></span></label>
     </fieldset>
     <fieldset>
+      <legend data-i18n="loginCodeLegend"></legend>
+      <button type="button" id="login-code-button" data-i18n="loginCodeButton"></button>
+      <p id="login-code-text" role="status"></p>
+    </fieldset>
+    <fieldset>
       <legend data-i18n="musicLegend"></legend>
       <label><input type="radio" name="music" value="0"> <span data-i18n="musicOff"></span></label>
       <label><input type="radio" name="music" value="50"> 50%</label>
@@ -224,10 +229,10 @@
   window.LivekitClient = LK;
   window.dispatchEvent(new Event('livekit-ready'));
 </script>
-<script src="farkle.js?v=70"></script>
-<script src="i18n.js?v=70"></script>
-<script src="games.js?v=70"></script>
-<script src="adventure.js?v=70"></script>
-<script src="app.js?v=70"></script>
+<script src="farkle.js?v=80"></script>
+<script src="i18n.js?v=80"></script>
+<script src="games.js?v=80"></script>
+<script src="adventure.js?v=80"></script>
+<script src="app.js?v=80"></script>
 </body>
 </html>
