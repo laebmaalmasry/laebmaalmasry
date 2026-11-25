@@ -291,8 +291,9 @@
     // the focused node (view.innerHTML is rebuilt), so restore on EVERY
     // render during your turn, not only on phase changes.
     const a = document.activeElement;
-    const focusInGame = !a || a === document.body || view.contains(a) || a.id === 'chat-input';
-    if (mine && focusInGame) setTimeout(() => { const p = $('farkle-primary'); if (p) p.focus(); }, 60);
+    const inPanel = a && a.closest && a.closest('#farkle-panel');
+    const typing = a && (a.id === 'chat-input' || a.tagName === 'INPUT' || a.tagName === 'TEXTAREA');
+    if (mine && !inPanel && !typing) setTimeout(() => { const p = $('farkle-primary'); if (p) p.focus(); }, 60);
   }
 
   if (!window.__farkleKeysBound) {
