@@ -122,6 +122,7 @@
     view.hidden = false;
     view.innerHTML = '';
     const s = g.state;
+    view.setAttribute('aria-label', t(GAME_NAMES[g.id]));
     view.appendChild(el('h4', t(GAME_NAMES[g.id])));
     if (g.spectator || myIndex() < 0) view.appendChild(el('p', t('gameInProgress')));
     if (g.id === 'farkle') renderFarkle(view, g, s);
@@ -130,6 +131,8 @@
     const endBtn = el('button', t('endGame'), { id: 'end-game-button' });
     endBtn.addEventListener('click', () => send({ type: 'end_game' }));
     view.appendChild(endBtn);
+    // one Tab stop for the whole game area; arrows move inside it
+    view.querySelectorAll('button').forEach(b => { b.tabIndex = -1; });
   }
 
   function scoreList(view, s) {
@@ -150,7 +153,7 @@
   // after every server state change so NVDA speaks what to do next.
   // Model studied live from the RS Games web client (status history + vertical
   // choice buttons) and QuentinC Playroom docs; no listbox, no Enter interception.
-  const FARKLE_VERSION = 'farkle-v5-2026-11-25';
+  const FARKLE_VERSION = 'farkle-v5.3-2026-11-25';
   window.FARKLE_VERSION = FARKLE_VERSION;
 
   function farkleSelPoints(g, dice) {
@@ -240,7 +243,6 @@
     panel.appendChild(el('p', (mine ? t('yourTurn') + '. ' : '') + t('turnOf')(s.currentPlayer)));
     panel.appendChild(el('p', t('turnPoints')(s.turnPoints)));
     panel.appendChild(el('p', t('diceLeft')(s.diceLeft)));
-    panel.appendChild(el('p', t('farkleKeysV5'), { class: 'farkle-keys-hint' }));
 
     // dice: vertical plain toggle buttons
     panel.appendChild(el('h5', t('diceHeading')));
@@ -315,7 +317,7 @@
       }
       else if (k === 's') { e.preventDefault(); announce(s.players.map((p, i) => t('scoreLine')(p, s.scores[i])).join('. ')); }
       else if (k === 't') { e.preventDefault(); announce(t('turnOf')(s.currentPlayer)); }
-      else if (k === 'b') { e.preventDefault(); farkleTryBank(); }
+      else if (k === 'h') { e.preventDefault(); farkleTryBank(); }
     });
   }
 
