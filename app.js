@@ -118,11 +118,20 @@
   // ---------- voice (LiveKit) ----------
   let lkRoom = null;
   let micTrack = null;
+  let voiceWanted = false;
   async function joinVoice() {
+    voiceWanted = true;
     send({ type: 'voice_join' });
   }
-  async function connectVoice(msg) {
-    if (!window.LivekitClient) return;
+  async function connectVoice(msg, attempt) {
+    attempt = attempt || 1;
+    if (!voiceWanted) return;
+    if (!window.LivekitClient) {
+      // the LiveKit module may still be loading; wait and retry
+      if (attempt < 10) setTimeout(() => connectVoice(msg, attempt + 1), 1000);
+      else announce(t('voiceFailed'));
+      return;
+    }
     try {
       lkRoom = new window.LivekitClient.Room();
       lkRoom.on('trackSubscribed', track => {
@@ -132,11 +141,20 @@
           document.body.appendChild(el);
         }
       });
+      lkRoom.on('disconnected', () => {
+        lkRoom = null;
+        if (micTrack) { micTrack.stop(); micTrack = null; }
+        if (voiceWanted) { announce(t('voiceRetry')); send({ type: 'voice_join' }); }
+      });
       await lkRoom.connect(msg.url, msg.token);
       window.__voiceRoom = lkRoom; // test hook
       // never auto-publish: the mic only goes live from an explicit F2 / button press
+      if (voiceWanted) announce(t('voiceOn'));
     } catch (e) {
       lkRoom = null;
+      if (!voiceWanted) return;
+      if (attempt < 4) setTimeout(() => connectVoice(msg, attempt + 1), 3000);
+      else announce(t('voiceFailed'));
     }
   }
   async function publishMic(on) {
@@ -151,6 +169,7 @@
     }
   }
   function leaveVoice() {
+    voiceWanted = false;
     if (micTrack) { micTrack.stop(); micTrack = null; }
     if (lkRoom) { lkRoom.disconnect(); lkRoom = null; }
   }
@@ -160,11 +179,20 @@
     state.mic = on;
     $('mic-button').setAttribute('aria-pressed', String(on));
     $('mic-button').textContent = on ? t('micOn') : t('micOff');
+    if (on && !lkRoom) {
+      // never claim the mic is open when there is no voice room behind it
+      state.mic = false;
+      $('mic-button').setAttribute('aria-pressed', 'false');
+      $('mic-button').textContent = t('micOff');
+      announce(t('voiceNotReady'));
+      return;
+    }
     announce(on ? t('micOnAnnounce') : t('micOffAnnounce'));
     publishMic(on).catch(() => {
       state.mic = false;
       $('mic-button').setAttribute('aria-pressed', 'false');
       $('mic-button').textContent = t('micOff');
+      announce(t('micFailed'));
     });
   }
 
@@ -179,6 +207,10 @@
     };
     ws.onclose = () => {
       if (!state.name) return; // never logged in; nothing to retry
+      // remember the table so the reconnect can put the player back on it
+      state.resumeTableId = state.table ? state.table.id : null;
+      state.table = null;
+      state.game = null;
       announce(t('disconnected'));
       setTimeout(connect, 2000);
     };
@@ -200,6 +232,11 @@
         applyMusic();
         applyRole();
         show('lobby');
+        if (state.resumeTableId != null) {
+          const rid = state.resumeTableId;
+          state.resumeTableId = null;
+          send({ type: 'join_table', id: rid });
+        }
         break;
       case 'rules':
         renderRules();
