@@ -20,7 +20,7 @@
   window.announce = m => announce(m);
   window.send = obj => send(obj);
   window.notifPlay = () => notifAudio.play().catch(() => {});
-  const CLIENT_VERSION = 'v5.3-2026-11-25';
+  const CLIENT_VERSION = 'v6-2026-11-25';
   window.CLIENT_VERSION = CLIENT_VERSION;
   const t = key => STRINGS[state.lang][key];
   const terr = code => (STRINGS[state.lang].errors[code]) || code;
@@ -59,6 +59,7 @@
   // ---------- views ----------
   function show(view) {
     for (const v of ['login', 'lobby', 'table', 'world']) $('view-' + v).hidden = v !== view;
+    if (view === 'table' && window.showScreen) window.showScreen('screen-game', true);
     const focusTarget = { login: 'login-name', lobby: 'lobby-games-menu', table: 'game-menu-buttons', world: 'adv-focus' }[view];
     const el = $(focusTarget);
     if (el) { const b = el.tagName === 'BUTTON' ? el : el.querySelector('button'); if (b) { b.focus(); return; } if (el.tabIndex >= 0) { el.focus(); return; } }
@@ -361,6 +362,35 @@
       ev.preventDefault();
       (ev.key === 'ArrowDown' ? btns[0] : btns[btns.length - 1]).focus();
     }
+  });
+
+  // ---------- one screen per area (Playroom model): Tab switches screens ----------
+  // Only the active screen is in the DOM buffer, so NVDA browse mode reads
+  // exactly one area top to bottom, never the whole page.
+  const SCREENS = ['screen-game', 'screen-log', 'screen-chat', 'screen-table'];
+  function screenMainEl(id) {
+    if (id === 'screen-game') return $('farkle-primary') || $('game-view').querySelector('button:not([hidden])') || $('game-menu-buttons').querySelector('button') || $('game-view');
+    if (id === 'screen-log') return $('farkle-log') || $('game-log-holder');
+    if (id === 'screen-chat') return $('chat-input');
+    if (id === 'screen-table') return $('leave-button');
+    return null;
+  }
+  function showScreen(id, silent) {
+    SCREENS.forEach(x => { $(x).hidden = x !== id; });
+    if (!silent) announce(t('screenName_' + id.replace('screen-', '')));
+    const target = screenMainEl(id);
+    if (target) setTimeout(() => target.focus(), 0);
+  }
+  window.showScreen = showScreen;
+  document.addEventListener('keydown', ev => {
+    if (ev.key !== 'Tab') return;
+    if ($('view-table').hidden) return;
+    if (document.querySelector('dialog[open]')) return;
+    ev.preventDefault();
+    const cur = SCREENS.find(id => !$(id).hidden) || 'screen-game';
+    let i = SCREENS.indexOf(cur);
+    i = ev.shiftKey ? (i - 1 + SCREENS.length) % SCREENS.length : (i + 1) % SCREENS.length;
+    showScreen(SCREENS[i]);
   });
 
   // when Tab lands on a menu container, go straight to the useful button
