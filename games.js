@@ -155,7 +155,7 @@
   // after every server state change so NVDA speaks what to do next.
   // Model studied live from the RS Games web client (status history + vertical
   // choice buttons) and QuentinC Playroom docs; no listbox, no Enter interception.
-  const FARKLE_VERSION = 'farkle-v5.3-2026-11-25';
+  const FARKLE_VERSION = 'farkle-v6-2026-11-25';
   window.FARKLE_VERSION = FARKLE_VERSION;
 
   function farkleSelPoints(g, dice) {
@@ -274,13 +274,7 @@
     bank.addEventListener('click', () => farkleTryBank());
     actions.appendChild(bank);
 
-    // log: plain focusable list, readable with NVDA arrows in browse or focus mode
-    view.appendChild(el('h5', t('logHeading')));
-    const entries = g.log || [];
-    const logEl = el('ul', null, { id: 'farkle-log', tabindex: '0', 'aria-label': t('logHeading') });
-    if (!entries.length) logEl.appendChild(el('li', t('logEmpty')));
-    entries.forEach(line => logEl.appendChild(el('li', line)));
-    view.appendChild(logEl);
+    renderGameLog(g);
     view.appendChild(el('p', FARKLE_VERSION, { class: 'farkle-version' }));
 
     if (!g._versionSaid) {
@@ -324,6 +318,7 @@
   }
 
   function renderDominoes(view, g, s) {
+    renderGameLog(g);
     scoreList(view, s);
     view.appendChild(el('p', `${t('roundLine')(s.roundNumber)}. ${t('boneyard')(s.boneyard)}.`));
     turnLine(view, s);
@@ -380,6 +375,7 @@
   }
 
   function renderSnakes(view, g, s) {
+    renderGameLog(g);
     const ul = el('ul');
     s.players.forEach((p, i) => ul.appendChild(el('li', t('positionLine')(p, s.positions[i]))));
     view.appendChild(ul);
@@ -391,5 +387,17 @@
     }
   }
 
-  window.GP = { renderGame, announceGameEvent };
+  // the log lives on its own screen now (one screen per area, Playroom model)
+  function renderGameLog(g) {
+    const holder = $('game-log-holder');
+    if (!holder) return;
+    holder.innerHTML = '';
+    const entries = (g && g.log) || [];
+    const logEl = el('ul', null, { id: 'farkle-log', tabindex: '0', 'aria-label': t('logHeading') });
+    if (!entries.length) logEl.appendChild(el('li', t('logEmpty')));
+    entries.forEach(line => logEl.appendChild(el('li', line)));
+    holder.appendChild(logEl);
+  }
+
+  window.GP = { renderGame, announceGameEvent, renderGameLog };
 })();
