@@ -221,4 +221,6 @@ function bestSelection(dice) {
   return best;
 }
 
-module.exports = { FarkleGame, combosIn, scoreSelection, rollHasScore, ofAKindPoints, bestSelection };
+const FARKLE_DEFAULTS = { target: 1000, minBank: 30, firstBankMin: 50 };
+if (typeof module !== 'undefined' && module.exports) module.exports = { FarkleGame, combosIn, scoreSelection, rollHasScore, ofAKindPoints, bestSelection, FARKLE_DEFAULTS };
+if (typeof window !== 'undefined') window.FarkleRules = { scoreSelection, rollHasScore, FARKLE_DEFAULTS };
