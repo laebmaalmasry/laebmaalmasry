@@ -20,6 +20,8 @@
   window.announce = m => announce(m);
   window.send = obj => send(obj);
   window.notifPlay = () => notifAudio.play().catch(() => {});
+  const CLIENT_VERSION = 'v5-2026-11-25';
+  window.CLIENT_VERSION = CLIENT_VERSION;
   const t = key => STRINGS[state.lang][key];
   const terr = code => (STRINGS[state.lang].errors[code]) || code;
 
@@ -57,9 +59,9 @@
   // ---------- views ----------
   function show(view) {
     for (const v of ['login', 'lobby', 'table', 'world']) $('view-' + v).hidden = v !== view;
-    const focusTarget = { login: 'login-name', lobby: 'create-form', table: 'chat-input', world: 'adv-focus' }[view];
-    const el = focusTarget === 'create-form' ? $('table-name-input') : $(focusTarget);
-    if (el) el.focus();
+    const focusTarget = { login: 'login-name', lobby: 'lobby-games-menu', table: 'game-menu-buttons', world: 'adv-focus' }[view];
+    const el = $(focusTarget);
+    if (el) { const b = el.tagName === 'BUTTON' ? el : el.querySelector('button'); if (b) { b.focus(); return; } if (el.tabIndex >= 0) { el.focus(); return; } }
   }
   window.showView = show;
 
@@ -203,7 +205,7 @@
     const ws = new WebSocket(`${proto}://${location.host}`);
     state.ws = ws;
     ws.onopen = () => {
-      send({ type: 'hello', name: state.name, token: state.token });
+      send({ type: 'hello', name: state.name, token: state.token, version: CLIENT_VERSION });
     };
     ws.onclose = () => {
       if (!state.name) return; // never logged in; nothing to retry
@@ -259,6 +261,9 @@
         if (!state.table && $('view-table').hidden) $('login-status').textContent = terr(msg.code);
         announce(terr(msg.code));
         break;
+      case 'client_old':
+        announce(t('clientOld'));
+        break;
       case 'tables': renderTables(msg.tables); break;
       case 'friends': renderFriends(msg.friends); break;
       case 'joined':
@@ -269,6 +274,7 @@
         $('mic-button').textContent = t('micOff');
         $('chat-log').innerHTML = '';
         renderTable();
+        if (window.GP) window.GP.renderGame();
         show('table');
         joinVoice();
         break;
@@ -323,13 +329,38 @@
     }
   }
 
+  // ---------- lobby games menu: pick a game, it opens a table for it ----------
+  document.querySelectorAll('[data-lobby-game]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.pendingGame = b.dataset.lobbyGame;
+      send({ type: 'create_table', name: t(GAME_KEY[b.dataset.lobbyGame] || 'gameFarkle') });
+    });
+  });
+  const GAME_KEY = { farkle: 'gameFarkle', dominoes: 'gameDominoes', snakes: 'gameSnakes' };
+
+  // ---------- vertical-menu focus: Up/Down moves between buttons ----------
+  document.addEventListener('keydown', ev => {
+    if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
+    const a = document.activeElement;
+    if (!a || a.tagName !== 'BUTTON') return;
+    const scope = a.closest('#game-view, #game-menu-buttons, #lobby-games-menu');
+    if (!scope) return;
+    const btns = [...scope.querySelectorAll('button:not([hidden])')].filter(b => b.getAttribute('aria-disabled') !== 'true' && !b.disabled);
+    if (btns.length < 2) return;
+    const i = btns.indexOf(a);
+    if (i < 0) return;
+    ev.preventDefault();
+    const next = ev.key === 'ArrowDown' ? (i + 1) % btns.length : (i - 1 + btns.length) % btns.length;
+    btns[next].focus();
+  });
+
   // ---------- forms ----------
   $('login-form').addEventListener('submit', ev => {
     ev.preventDefault();
     const name = $('login-name').value.trim();
     if (!name) return;
     state.name = name;
-    if (state.ws && state.ws.readyState === 1) send({ type: 'hello', name, token: state.token });
+    if (state.ws && state.ws.readyState === 1) send({ type: 'hello', name, token: state.token, version: CLIENT_VERSION });
     else connect();
   });
   $('create-form').addEventListener('submit', ev => {
