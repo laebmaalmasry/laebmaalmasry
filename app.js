@@ -20,7 +20,7 @@
   window.announce = m => announce(m);
   window.send = obj => send(obj);
   window.notifPlay = () => notifAudio.play().catch(() => {});
-  const CLIENT_VERSION = 'v7-2026-11-25';
+  const CLIENT_VERSION = 'v8-2026-11-26';
   window.CLIENT_VERSION = CLIENT_VERSION;
   const t = key => STRINGS[state.lang][key];
   const terr = code => (STRINGS[state.lang].errors[code]) || code;
@@ -242,6 +242,12 @@
           send({ type: 'join_table', id: rid });
         }
         break;
+      case 'login_code': {
+        const text = t('loginCodeIs')(msg.code, msg.minutes);
+        $('login-code-text').textContent = text;
+        announce(text);
+        break;
+      }
       case 'rules':
         renderRules();
         $('rules-dialog').showModal();
@@ -492,6 +498,7 @@
   $('mic-button').addEventListener('click', () => setMic(!state.mic));
   $('bot-button').addEventListener('click', () => send({ type: 'add_bot' }));
   $('settings-button').addEventListener('click', () => { $('screens-fieldset').hidden = true; $('settings-dialog').showModal(); });
+  $('login-code-button').addEventListener('click', () => { $('login-code-text').textContent = ''; send({ type: 'login_code' }); });
 
   // ---------- settings: jump to a lobby screen ----------
   const GOTO_SCREEN = { 'goto-games': 'screen-lobby-games', 'goto-adventure': 'screen-lobby-adventure', 'goto-tables': 'screen-lobby-tables', 'goto-friends': 'screen-lobby-friends', 'goto-report': 'screen-lobby-report', 'goto-block': 'screen-lobby-block', 'goto-admin': 'screen-lobby-admin' };
