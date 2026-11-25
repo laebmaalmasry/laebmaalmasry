@@ -96,6 +96,7 @@
         if (window.ADV) { window.ADV.play('pm'); if (!$('view-world').hidden) window.ADV.log(text); }
         break;
       }
+      case 'login_code': announce(t('loginCodeIs')(msg.code, msg.minutes)); break;
       case 'adv_event': if (window.ADV) window.ADV.onEvent(msg); break;
       case 'adv_left': if (window.ADV) window.ADV.onLeft(); break;
       case 'announcement': announce(t('announcementFrom')(msg.from, msg.text)); break;
