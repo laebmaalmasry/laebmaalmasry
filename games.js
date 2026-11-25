@@ -100,22 +100,23 @@
       menu.hidden = false;
       view.hidden = true;
       view.innerHTML = '';
-      // options menu: add a bot, then start a game (chosen game first)
+      // game menu: بدء اللعبة first (the table's own kind), then add bot; chat rooms talk only
       const box = $('game-menu-buttons');
       if (box) {
         box.innerHTML = '';
-        const bot = el('button', t('addBotMenu'), { id: 'menu-add-bot' });
-        bot.tabIndex = -1;
-        bot.addEventListener('click', () => { send({ type: 'add_bot' }); });
-        box.appendChild(bot);
-        const order = ['farkle', 'dominoes', 'snakes'];
-        const pend = state.pendingGame;
-        if (pend && order.includes(pend)) { order.splice(order.indexOf(pend), 1); order.unshift(pend); }
-        for (const id of order) {
-          const b = el('button', t('startGameBtn')(t(GAME_NAMES[id])), { 'data-start-game': id });
-          b.tabIndex = -1;
-          b.addEventListener('click', () => send({ type: 'start_game', game: id }));
-          box.appendChild(b);
+        const kind = (state.table && state.table.kind) || 'farkle';
+        if (kind === 'chat') {
+          const p = el('p', t('chatRoomOnly'));
+          box.appendChild(p);
+        } else {
+          const start = el('button', t('miStart'), { id: 'menu-start-game' });
+          start.tabIndex = -1;
+          start.addEventListener('click', () => send({ type: 'start_game' }));
+          box.appendChild(start);
+          const bot = el('button', t('addBotMenu'), { id: 'menu-add-bot' });
+          bot.tabIndex = -1;
+          bot.addEventListener('click', () => { send({ type: 'add_bot' }); });
+          box.appendChild(bot);
         }
       }
       return;
