@@ -169,6 +169,7 @@ const STRINGS = {
     // روح المغامرة
     advEnter: 'روح المغامرة',
     haveCodeLabel: 'كود الدخول (اختياري)',
+    loginCodeIs: (code, minutes) => `كود الدخول بتاعك: ${code}. شغال ${minutes} دقايق وبيشتغل مرة واحدة بس. اكتبه مع اسمك في شاشة دخول المنصة.`,
     haveCodeHint: 'لو اسمك متسجل في تطبيق العب مع المصري: افتح الإعدادات هناك واضغط أظهر كود الدخول، واكتب الكود هنا مع اسمك عشان تدخل بنفس الحساب.',
     advLobbyHint: 'اضغط الزر عشان تدخل العالم. جوه العالم: الأسهم يمين وشمال للمشي، سهم فوق للقفز، الأرقام من 1 لـ 6 و8 لقوة القفز، G مع سهم للاستكشاف، Enter لدخول الأماكن، W مكانك، O المتواجدين، F أصحابك المتواجدين، T رسالة خاصة، Escape للخروج.',
     advTitle: 'روح المغامرة',
@@ -471,6 +472,7 @@ const STRINGS = {
     // Spirit of Adventure
     advEnter: 'Spirit of Adventure',
     haveCodeLabel: 'Login code (optional)',
+    loginCodeIs: (code, minutes) => `Your login code is ${code}. It works for ${minutes} minutes and only once. Type it with your name on the platform login screen.`,
     haveCodeHint: 'If your name is registered in the Laeb Ma Al Masry app: open Settings there, press Show my login code, and enter the code here with your name to use the same account.',
     advLobbyHint: 'Press the button to enter the world. Inside: Left and Right arrows walk, Up jumps, digits 1 to 6 and 8 set jump power, hold G with an arrow to explore, Enter enters places, W says where you are, O lists who is online, F lists your online friends, T starts a private message, Escape leaves.',
     advTitle: 'Spirit of Adventure',
