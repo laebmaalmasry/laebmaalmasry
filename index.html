@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>العب مع المصري</title>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=53">
 </head>
 <body>
 <header>
@@ -24,10 +24,10 @@
   <section id="view-lobby" aria-labelledby="lobby-h" hidden>
     <h2 id="lobby-h" data-i18n="lobbyTitle"></h2>
     <h3 data-i18n="gamesMenuHeading"></h3>
-    <div id="lobby-games-menu" class="menu-vertical" role="group" aria-label="games">
-      <button data-lobby-game="farkle" data-i18n="gameFarkle"></button>
-      <button data-lobby-game="dominoes" data-i18n="gameDominoes"></button>
-      <button data-lobby-game="snakes" data-i18n="gameSnakes"></button>
+    <div id="lobby-games-menu" class="menu-vertical" role="group" aria-label="games" tabindex="0">
+      <button tabindex="-1" data-lobby-game="farkle" data-i18n="gameFarkle"></button>
+      <button tabindex="-1" data-lobby-game="dominoes" data-i18n="gameDominoes"></button>
+      <button tabindex="-1" data-lobby-game="snakes" data-i18n="gameSnakes"></button>
     </div>
     <p><button id="adv-enter-button" data-i18n="advEnter"></button></p>
     <p><button id="rules-button" data-i18n="rulesButton"></button></p>
@@ -115,29 +115,29 @@
 
   <section id="view-table" aria-labelledby="table-h" hidden>
     <h2 id="table-h"></h2>
-    <div class="table-actions">
-      <button id="leave-button" data-i18n="leaveTable"></button>
-      <button id="mic-button" aria-pressed="false"></button>
-      <button id="bot-button" data-i18n="addBot"></button>
-      <button id="settings-button" data-i18n="settingsButton"></button>
-    </div>
     <h3 data-i18n="playersHeading"></h3>
     <ul id="players"></ul>
     <section id="game-area" aria-labelledby="game-h">
       <h3 id="game-h" data-i18n="gameHeading"></h3>
       <div id="game-menu">
         <p data-i18n="startGamePrompt"></p>
-        <div id="game-menu-buttons" class="menu-vertical"></div>
+        <div id="game-menu-buttons" class="menu-vertical" tabindex="0"></div>
       </div>
-      <div id="game-view" hidden></div>
+      <div id="game-view" tabindex="0" hidden></div>
     </section>
     <h3 data-i18n="chatHeading"></h3>
     <div id="chat-log" role="log" aria-live="polite" aria-label="chat"></div>
     <form id="chat-form">
       <label for="chat-input" data-i18n="chatLabel"></label>
       <input id="chat-input" maxlength="500" autocomplete="off">
-      <button type="submit" data-i18n="sendButton"></button>
+      <button type="submit" tabindex="-1" data-i18n="sendButton"></button>
     </form>
+    <div class="table-actions">
+      <button id="leave-button" tabindex="-1" data-i18n="leaveTable"></button>
+      <button id="mic-button" tabindex="-1" aria-pressed="false"></button>
+      <button id="bot-button" tabindex="-1" data-i18n="addBot"></button>
+      <button id="settings-button" tabindex="-1" data-i18n="settingsButton"></button>
+    </div>
   </section>
 </main>
 
@@ -171,16 +171,24 @@
   </form>
 </dialog>
 
+<dialog id="help-dialog" aria-labelledby="help-h">
+  <h2 id="help-h" data-i18n="helpTitle"></h2>
+  <div id="help-body" tabindex="0"></div>
+  <form method="dialog" id="help-form">
+    <button type="submit" data-i18n="closeHelp"></button>
+  </form>
+</dialog>
+
 <div id="live" class="sr-only" aria-live="polite"></div>
 <script type="module">
   import * as LK from './livekit-client.esm.mjs';
   window.LivekitClient = LK;
   window.dispatchEvent(new Event('livekit-ready'));
 </script>
-<script src="farkle.js"></script>
-<script src="i18n.js"></script>
-<script src="games.js"></script>
-<script src="adventure.js"></script>
-<script src="app.js"></script>
+<script src="farkle.js?v=53"></script>
+<script src="i18n.js?v=53"></script>
+<script src="games.js?v=53"></script>
+<script src="adventure.js?v=53"></script>
+<script src="app.js?v=53"></script>
 </body>
 </html>
