@@ -92,19 +92,24 @@ const Kv = (() => {
     },
   };
 })();
+let kvLoaded = false;
 async function loadData() {
   try {
     const d = await Kv.load();
     users = (d && d.users) || {};
     penalties = (d && d.penalties) || [];
     reports = (d && d.reports) || [];
+    kvLoaded = true;
   } catch (e) {
-    console.error('kv load failed, starting empty:', e.message);
+    // never save back after a failed load: an empty in-memory state must not
+    // overwrite the store (that is how account data gets wiped)
+    console.error('kv load failed, starting empty; saving DISABLED until restart:', e.message);
     users = {}; penalties = []; reports = [];
   }
 }
 let saveTimer = null;
 function saveData() {
+  if (!kvLoaded && Kv.kind === 'upstash') return; // load failed at boot: refuse to overwrite the store
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     Kv.save({ users, penalties, reports }).catch(e => console.error('kv save failed:', e.message));
@@ -189,9 +194,16 @@ const handlers = {
         // one-time login code bridge: name + valid code issues the token to a new app/device
         const c = String(msg.code || '').trim();
         if (!c) return err(o.ws, 'name_taken');
-        if (!user.loginCode || user.loginCode.code !== c) return err(o.ws, 'bad_code');
-        if (user.loginCode.expires <= Date.now()) { user.loginCode = null; return err(o.ws, 'code_expired'); }
-        user.loginCode = null; // single use
+        // one-time owner recovery: while RECOVERY_CODE is set in the environment it works
+        // like a login code for any account (set briefly to rescue a locked-out player, then unset)
+        const rec = process.env.RECOVERY_CODE;
+        if (!rec || c !== rec) {
+          if (!user.loginCode || user.loginCode.code !== c) return err(o.ws, 'bad_code');
+          if (user.loginCode.expires <= Date.now()) { user.loginCode = null; return err(o.ws, 'code_expired'); }
+          user.loginCode = null; // single use
+        } else {
+          console.log('[recovery] RECOVERY_CODE used for account:', key);
+        }
         // a valid code proves ownership: take over any existing session of this account
         const old = online.get(user.id);
         if (old && old.ws !== o.ws) {
