@@ -156,6 +156,7 @@ function publicTable(t) {
     min: g.min, max: g.max,
     playing: !!t.game,
     host: memberName(t, t.hostId),
+    options: t.options || null,
   };
 }
 function usersName(id) {
@@ -205,7 +206,7 @@ function livekitToken(identity, name, room) {
   return header + '.' + payload + '.' + sig;
 }
 
-const CLIENT_VERSION = 'vD-2026-11-26';
+const CLIENT_VERSION = 'vE-2026-11-26';
 
 const handlers = {
   hello(o, msg) {
@@ -292,7 +293,7 @@ const handlers = {
       t.game.instance.players.forEach((p, i) => { scores[p] = t.game.instance.scores[i]; });
     }
     const id = nextSaveId++;
-    savedTables[id] = { id, ownerId: o.user.id, kind: t.kind, name: t.name, scores, savedAt: Date.now() };
+    savedTables[id] = { id, ownerId: o.user.id, kind: t.kind, name: t.name, scores, options: t.options || null, savedAt: Date.now() };
     saveData();
     send(o.ws, { type: 'table_saved', id });
   },
@@ -307,7 +308,7 @@ const handlers = {
     if (!s || s.ownerId !== o.user.id) return err(o.ws, 'no_such_saved');
     const kind = TABLE_GAMES[s.kind] ? s.kind : 'farkle';
     const name = String(s.name || '').trim().slice(0, 40) || o.user.name;
-    const t = { id: nextTableId++, name, kind, hostId: o.user.id, banned: new Set(), log: [], playerIds: [o.user.id], botIds: new Set(), botNames: {}, botSeq: 0, botTimer: null, botDelayMs: null, savedScores: s.scores || {} };
+    const t = { id: nextTableId++, name, kind, hostId: o.user.id, banned: new Set(), log: [], playerIds: [o.user.id], botIds: new Set(), botNames: {}, botSeq: 0, botTimer: null, botDelayMs: null, savedScores: s.scores || {}, options: s.options || null };
     tables.set(t.id, t);
     o.tableId = t.id;
     send(o.ws, { type: 'joined', table: publicTable(t) });
@@ -364,6 +365,22 @@ const handlers = {
     if (!o.user.friends.includes(key)) { o.user.friends.push(key); saveData(); }
     send(o.ws, friendsPayload(o.user));
   },
+  set_options(o, msg) {
+    if (!o.user || !o.tableId) return err(o.ws, 'not_in_table');
+    const t = tables.get(o.tableId);
+    if (!t) return err(o.ws, 'not_in_table');
+    if (t.hostId !== o.user.id) return err(o.ws, 'not_host');
+    if (t.kind !== 'farkle') return err(o.ws, 'bad_options');
+    const ALLOWED = { firstBankMin: [50, 100, 200], minBank: [30, 40, 50, 100], target: [1000, 2000, 3000, 5000] };
+    const next = Object.assign({ firstBankMin: 50, minBank: 30, target: 1000 }, t.options || {});
+    for (const k of Object.keys(ALLOWED)) {
+      if (msg[k] == null) continue;
+      if (!ALLOWED[k].includes(Number(msg[k]))) return err(o.ws, 'bad_options');
+      next[k] = Number(msg[k]);
+    }
+    t.options = next;
+    broadcastTable(t, { type: 'table_update', table: publicTable(t) });
+  },
   start_game(o, msg) {
     if (!o.user || !o.tableId) return err(o.ws, 'not_in_table');
     const t = tables.get(o.tableId);
@@ -375,7 +392,8 @@ const handlers = {
     const Engine = ENGINES[t.kind];
     if (!Engine) return err(o.ws, 'unknown_game');
     const names = t.playerIds.map(id => memberName(t, id));
-    t.game = { id: t.kind, instance: new Engine(names) };
+    const inst = t.kind === 'farkle' ? new Engine(names, t.options || {}) : new Engine(names);
+    t.game = { id: t.kind, instance: inst };
     if (t.savedScores) {
       const inst = t.game.instance;
       if (inst.scores) inst.players.forEach((p, i) => { const v = t.savedScores[p]; if (typeof v === 'number') inst.scores[i] = v; });
