@@ -201,7 +201,7 @@ function livekitToken(identity, name, room) {
   return header + '.' + payload + '.' + sig;
 }
 
-const CLIENT_VERSION = 'vA-2026-11-26';
+const CLIENT_VERSION = 'vB-2026-11-26';
 
 const handlers = {
   hello(o, msg) {
@@ -259,7 +259,8 @@ const handlers = {
     if (o.tableId) return err(o.ws, 'already_in_table');
     const kind = TABLE_GAMES[msg.game] ? msg.game : 'farkle';
     const name = String(msg.name || '').trim().slice(0, 40) || o.user.name;
-    const t = { id: nextTableId++, name, kind, hostId: o.user.id, banned: new Set(), log: [], playerIds: [o.user.id], botIds: new Set(), botNames: {}, botSeq: 0, botTimer: null };
+    const bd = Number(msg.botDelay);
+    const t = { id: nextTableId++, name, kind, hostId: o.user.id, banned: new Set(), log: [], playerIds: [o.user.id], botIds: new Set(), botNames: {}, botSeq: 0, botTimer: null, botDelayMs: (bd >= 300 && bd <= 5000) ? Math.round(bd) : null };
     tables.set(t.id, t);
     o.tableId = t.id;
     send(o.ws, { type: 'joined', table: publicTable(t) });
@@ -268,6 +269,10 @@ const handlers = {
     broadcastLobby(tablesPayload());
   },
   list_tables(o) { send(o.ws, tablesPayload()); },
+  online_list(o) {
+    if (!o.user) return;
+    send(o.ws, { type: 'online_list', names: [...online.values()].map(x => x.user.name) });
+  },
   join_table(o, msg) {
     if (!o.user) return;
     if (o.tableId) return err(o.ws, 'already_in_table');
@@ -657,7 +662,7 @@ function maybeBotTurn(t) {
     }
     broadcastGameState(t);
     maybeBotTurn(t);
-  }, 900 + Math.floor(Math.random() * 700));
+  }, t.botDelayMs != null ? t.botDelayMs : 900 + Math.floor(Math.random() * 700));
 }
 
 function leaveTable(o) {
