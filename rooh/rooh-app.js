@@ -5,7 +5,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const SERVER = 'wss://ruby-ranger-5880.de.deplexo.com';
-  const ROOH_VERSION = 'rooh-v1-2026-11-26';
+  const ROOH_VERSION = 'rooh-v2-2026-11-26';
 
   const state = {
     lang: localStorage.getItem('rooh.lang') || 'ar',
