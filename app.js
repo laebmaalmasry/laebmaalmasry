@@ -25,7 +25,7 @@
   window.announce = m => announce(m);
   window.send = obj => send(obj);
   window.notifPlay = () => notifAudio.play().catch(() => {});
-  const CLIENT_VERSION = 'vF-2026-11-26';
+  const CLIENT_VERSION = 'vG-2026-11-26';
   window.CLIENT_VERSION = CLIENT_VERSION;
   const t = key => STRINGS[state.lang][key];
   const terr = code => (STRINGS[state.lang].errors[code]) || code;
@@ -77,6 +77,8 @@
       case 'host': return t('logHost')(ev.name);
       case 'voice': return t('logVoice')(ev.name);
       case 'restored': return t('logRestored')(ev.name);
+      case 'made_private': return t('logMadePrivate')(ev.name);
+      case 'made_public': return t('logMadePublic')(ev.name);
       default: return '';
     }
   }
@@ -364,6 +366,9 @@
         break;
       }
       case 'chat': addChatLine(msg.from, msg.text); break;
+      case 'table_invite': showInviteDialog(msg); break;
+      case 'invite_sent': announce(t('inviteSent')(msg.name)); break;
+      case 'invite_declined': announce(t('inviteDeclined')(msg.name)); break;
       case 'table_log': renderRoomLog(msg.log || []); break;
       case 'table_log_event': appendRoomLog(msg.ev); break;
       case 'kicked':
@@ -578,7 +583,7 @@
       if (!noGame) item('miReplacePlayer', null, true);
       item('miMakePrivate', null, true);
       item('miSaveRoom', () => send({ type: 'save_table' }));
-      item('miInviteFriend', null, true);
+      item('miInviteFriend', () => openInvitePicker());
       item('miHostMgmt', () => openHostMenu());
       item('miShareDeviceAudio', null, true);
       item('miShareClip', null, true);
@@ -645,6 +650,53 @@
     if (!dlg.open) dlg.showModal();
     $('howto-body').focus();
   }
+  function openInvitePicker() {
+    const dlg = $('table-menu-dialog');
+    const box = $('table-menu-buttons');
+    if (!dlg.open) dlg.showModal();
+    $('table-menu-h').textContent = t('miInviteFriend');
+    box.innerHTML = '';
+    const friends = (window.lastFriendsList || []).filter(f => f.online);
+    if (!friends.length) {
+      const b = document.createElement('button');
+      b.textContent = t('noOnlineFriends');
+      b.tabIndex = -1;
+      b.setAttribute('aria-disabled', 'true');
+      b.addEventListener('click', () => announce(t('noOnlineFriends')));
+      box.appendChild(b);
+    }
+    for (const f of friends) {
+      const b = document.createElement('button');
+      b.textContent = f.name;
+      b.tabIndex = -1;
+      b.addEventListener('click', () => { send({ type: 'invite_friend', name: f.name }); dlg.close(); });
+      box.appendChild(b);
+    }
+    const back = document.createElement('button');
+    back.textContent = t('back');
+    back.tabIndex = -1;
+    back.addEventListener('click', () => dlg.close());
+    box.appendChild(back);
+    const first = box.querySelector('button');
+    if (first) setTimeout(() => first.focus(), 0);
+  }
+  function showInviteDialog(msg) {
+    const dlg = $('invite-dialog');
+    $('invite-text').textContent = t('inviteFrom')(msg.from, msg.table);
+    const box = $('invite-buttons');
+    box.innerHTML = '';
+    const acc = document.createElement('button');
+    acc.textContent = t('inviteAccept');
+    acc.addEventListener('click', () => { send({ type: 'accept_invite' }); dlg.close(); });
+    box.appendChild(acc);
+    const dec = document.createElement('button');
+    dec.textContent = t('inviteDecline');
+    dec.addEventListener('click', () => { send({ type: 'decline_invite' }); dlg.close(); });
+    box.appendChild(dec);
+    announce(t('inviteFrom')(msg.from, msg.table));
+    if (!dlg.open) dlg.showModal();
+    setTimeout(() => acc.focus(), 0);
+  }
   function openHostMenu() {
     // إدارة المضيف submenu: make private, invite, replace, transfer host, kick, kick+ban, back
     const dlg = $('table-menu-dialog');
@@ -660,8 +712,9 @@
       else b.addEventListener('click', fn);
       box.appendChild(b);
     };
-    item('miMakePrivate', null, true);
-    item('miInviteFriend', null, true);
+    const isPriv = !!(state.table && state.table.private);
+    item(isPriv ? 'miMakePublic' : 'miMakePrivate', () => { send({ type: 'set_private', private: !isPriv }); announce(isPriv ? t('roomNowPublic') : t('roomNowPrivate')); dlg.close(); });
+    item('miInviteFriend', () => openInvitePicker());
     item('miReplacePlayer', null, true);
     item('miTransferHost', () => openPlayerPicker('transfer_host'));
     item('miKick', () => openPlayerPicker('kick_player'));
