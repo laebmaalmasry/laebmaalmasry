@@ -206,7 +206,7 @@ function livekitToken(identity, name, room) {
   return header + '.' + payload + '.' + sig;
 }
 
-const CLIENT_VERSION = 'vE-2026-11-26';
+const CLIENT_VERSION = 'vF-2026-11-26';
 
 const handlers = {
   hello(o, msg) {
