@@ -63,6 +63,8 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 // users: name(lower) -> { id, name, token, friends: [], role: 'player'|'mod'|'owner',
 //   sawRules: bool, blocked: [lowerName,...], muteUntil: ts|null, banUntil: ts|'perm'|null }
 let users = {};
+let savedTables = {}; // saveId -> { id, ownerId, kind, name, scores: {playerName: points}, savedAt }
+let nextSaveId = 1;
 let penalties = [];
 let reports = [];
 // Persistent store: Upstash Redis over HTTPS when configured (production),
@@ -108,6 +110,8 @@ async function loadData() {
     users = (d && d.users) || {};
     penalties = (d && d.penalties) || [];
     reports = (d && d.reports) || [];
+    savedTables = (d && d.savedTables) || {};
+    for (const id of Object.keys(savedTables)) { const n = Number(id); if (n >= nextSaveId) nextSaveId = n + 1; }
     kvLoaded = true;
   } catch (e) {
     // never save back after a failed load: an empty in-memory state must not
@@ -121,7 +125,7 @@ function saveData() {
   if (!kvLoaded && Kv.kind === 'upstash') return; // load failed at boot: refuse to overwrite the store
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    Kv.save({ users, penalties, reports }).catch(e => console.error('kv save failed:', e.message));
+    Kv.save({ users, penalties, reports, savedTables }).catch(e => console.error('kv save failed:', e.message));
   }, 250);
 }
 
@@ -201,7 +205,7 @@ function livekitToken(identity, name, room) {
   return header + '.' + payload + '.' + sig;
 }
 
-const CLIENT_VERSION = 'vB-2026-11-26';
+const CLIENT_VERSION = 'vC-2026-11-26';
 
 const handlers = {
   hello(o, msg) {
@@ -276,6 +280,49 @@ const handlers = {
     broadcastLobby(tablesPayload());
   },
   list_tables(o) { send(o.ws, tablesPayload()); },
+  save_table(o) {
+    if (!o.user || !o.tableId) return err(o.ws, 'not_in_table');
+    const t = tables.get(o.tableId);
+    if (!t) return err(o.ws, 'not_in_table');
+    if (t.hostId !== o.user.id) return err(o.ws, 'not_host');
+    if (t.kind === 'chat') return err(o.ws, 'chat_no_save');
+    if (Object.values(savedTables).filter(s => s.ownerId === o.user.id).length >= 20) return err(o.ws, 'saved_full');
+    const scores = {};
+    if (t.game && t.game.instance && t.game.instance.scores) {
+      t.game.instance.players.forEach((p, i) => { scores[p] = t.game.instance.scores[i]; });
+    }
+    const id = nextSaveId++;
+    savedTables[id] = { id, ownerId: o.user.id, kind: t.kind, name: t.name, scores, savedAt: Date.now() };
+    saveData();
+    send(o.ws, { type: 'table_saved', id });
+  },
+  saved_list(o) {
+    if (!o.user) return;
+    send(o.ws, { type: 'saved_list', saved: Object.values(savedTables).filter(s => s.ownerId === o.user.id).sort((a, b) => b.savedAt - a.savedAt) });
+  },
+  restore_saved(o, msg) {
+    if (!o.user) return;
+    if (o.tableId) return err(o.ws, 'already_in_table');
+    const s = savedTables[Number(msg.id)];
+    if (!s || s.ownerId !== o.user.id) return err(o.ws, 'no_such_saved');
+    const kind = TABLE_GAMES[s.kind] ? s.kind : 'farkle';
+    const name = String(s.name || '').trim().slice(0, 40) || o.user.name;
+    const t = { id: nextTableId++, name, kind, hostId: o.user.id, banned: new Set(), log: [], playerIds: [o.user.id], botIds: new Set(), botNames: {}, botSeq: 0, botTimer: null, botDelayMs: null, savedScores: s.scores || {} };
+    tables.set(t.id, t);
+    o.tableId = t.id;
+    send(o.ws, { type: 'joined', table: publicTable(t) });
+    logEvent(t, { k: 'restored', name: o.user.name, kind, min: TABLE_GAMES[kind].min, max: TABLE_GAMES[kind].max });
+    send(o.ws, { type: 'table_log', log: t.log });
+    broadcastLobby(tablesPayload());
+  },
+  delete_saved(o, msg) {
+    if (!o.user) return;
+    const s = savedTables[Number(msg.id)];
+    if (!s || s.ownerId !== o.user.id) return err(o.ws, 'no_such_saved');
+    delete savedTables[s.id];
+    saveData();
+    send(o.ws, { type: 'saved_list', saved: Object.values(savedTables).filter(x => x.ownerId === o.user.id).sort((a, b) => b.savedAt - a.savedAt) });
+  },
   online_list(o) {
     if (!o.user) return;
     send(o.ws, { type: 'online_list', names: [...online.values()].map(x => x.user.name) });
@@ -329,6 +376,11 @@ const handlers = {
     if (!Engine) return err(o.ws, 'unknown_game');
     const names = t.playerIds.map(id => memberName(t, id));
     t.game = { id: t.kind, instance: new Engine(names) };
+    if (t.savedScores) {
+      const inst = t.game.instance;
+      if (inst.scores) inst.players.forEach((p, i) => { const v = t.savedScores[p]; if (typeof v === 'number') inst.scores[i] = v; });
+      t.savedScores = null;
+    }
     broadcastTable(t, { type: 'game_started', ...gamePublicState(t) });
     if (t.game.id === 'dominoes') {
       t.playerIds.forEach((pid, idx) => sendToUser(pid, { type: 'game_hand', game: 'dominoes', hand: t.game.instance.handOf(idx) }));
