@@ -64,6 +64,7 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 //   sawRules: bool, blocked: [lowerName,...], muteUntil: ts|null, banUntil: ts|'perm'|null }
 let users = {};
 let savedTables = {}; // saveId -> { id, ownerId, kind, name, scores: {playerName: points}, savedAt }
+let invites = {}; // invitee lowerName -> { tableId, fromId, fromName, tableName }
 let nextSaveId = 1;
 let penalties = [];
 let reports = [];
@@ -157,6 +158,7 @@ function publicTable(t) {
     playing: !!t.game,
     host: memberName(t, t.hostId),
     options: t.options || null,
+    private: !!t.private,
   };
 }
 function usersName(id) {
@@ -178,7 +180,7 @@ function logEvent(t, ev) {
   if (t.log.length > 200) t.log.splice(0, t.log.length - 200);
   broadcastTable(t, { type: 'table_log_event', ev });
 }
-function tablesPayload() { return { type: 'tables', tables: [...tables.values()].map(publicTable) }; }
+function tablesPayload() { return { type: 'tables', tables: [...tables.values()].filter(t => !t.private).map(publicTable) }; }
 function friendsPayload(user) {
   return {
     type: 'friends',
@@ -206,7 +208,7 @@ function livekitToken(identity, name, room) {
   return header + '.' + payload + '.' + sig;
 }
 
-const CLIENT_VERSION = 'vF-2026-11-26';
+const CLIENT_VERSION = 'vG-2026-11-26';
 
 const handlers = {
   hello(o, msg) {
@@ -328,11 +330,12 @@ const handlers = {
     if (!o.user) return;
     send(o.ws, { type: 'online_list', names: [...online.values()].map(x => x.user.name) });
   },
-  join_table(o, msg) {
+  join_table(o, msg, viaInvite) {
     if (!o.user) return;
     if (o.tableId) return err(o.ws, 'already_in_table');
     const t = tables.get(Number(msg.id));
     if (!t) return err(o.ws, 'no_table');
+    if (t.private && !viaInvite) return err(o.ws, 'table_private');
     if ((t.banned || new Set()).has(lowerName(o.user.name))) return err(o.ws, 'kicked');
     if (t.playerIds.length >= (TABLE_GAMES[t.kind] ? TABLE_GAMES[t.kind].max : MAX_PLAYERS)) return err(o.ws, 'table_full');
     t.playerIds.push(o.user.id);
@@ -343,6 +346,49 @@ const handlers = {
     if (t.game) send(o.ws, { type: 'game_started', ...gamePublicState(t), spectator: true });
     broadcastTable(t, { type: 'table_update', table: publicTable(t) }, o.user.id);
     broadcastLobby(tablesPayload());
+  },
+  set_private(o, msg) {
+    if (!o.user || !o.tableId) return err(o.ws, 'not_in_table');
+    const t = tables.get(o.tableId);
+    if (!t) return err(o.ws, 'not_in_table');
+    if (t.hostId !== o.user.id) return err(o.ws, 'not_host');
+    t.private = !!msg.private;
+    broadcastTable(t, { type: 'table_update', table: publicTable(t) });
+    logEvent(t, { k: t.private ? 'made_private' : 'made_public', name: o.user.name });
+    broadcastLobby(tablesPayload());
+  },
+  invite_friend(o, msg) {
+    if (!o.user || !o.tableId) return err(o.ws, 'not_in_table');
+    const t = tables.get(o.tableId);
+    if (!t) return err(o.ws, 'not_in_table');
+    if (t.hostId !== o.user.id) return err(o.ws, 'not_host');
+    const key = lowerName(msg.name);
+    if (!o.user.friends.includes(key)) return err(o.ws, 'not_friends');
+    const f = users[key];
+    if (!f || !online.has(f.id)) return err(o.ws, 'not_online');
+    const fo = online.get(f.id);
+    if (fo.tableId) return err(o.ws, 'already_in_table');
+    if ((t.banned || new Set()).has(key)) return err(o.ws, 'kicked');
+    if (t.playerIds.length >= (TABLE_GAMES[t.kind] ? TABLE_GAMES[t.kind].max : MAX_PLAYERS)) return err(o.ws, 'table_full');
+    invites[key] = { tableId: t.id, fromId: o.user.id, fromName: o.user.name, tableName: t.name };
+    send(fo.ws, { type: 'table_invite', from: o.user.name, table: t.name, kind: t.kind });
+    send(o.ws, { type: 'invite_sent', name: f.name });
+  },
+  accept_invite(o) {
+    if (!o.user) return;
+    const key = lowerName(o.user.name);
+    const inv = invites[key];
+    if (!inv) return err(o.ws, 'no_invite');
+    delete invites[key];
+    handlers.join_table(o, { id: inv.tableId }, true);
+  },
+  decline_invite(o) {
+    if (!o.user) return;
+    const key = lowerName(o.user.name);
+    const inv = invites[key];
+    if (!inv) return;
+    delete invites[key];
+    sendToUser(inv.fromId, { type: 'invite_declined', name: o.user.name });
   },
   leave_table(o) { leaveTable(o); },
   chat(o, msg) {
