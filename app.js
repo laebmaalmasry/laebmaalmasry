@@ -245,6 +245,7 @@
   // ---------- websocket ----------
   function send(obj) { if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify(obj)); }
   function connect() {
+    if (state.ws && (state.ws.readyState === 0 || state.ws.readyState === 1)) return; // one socket only: a connecting/open socket's onopen sends hello with the current name
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}`);
     state.ws = ws;
@@ -252,6 +253,7 @@
       send({ type: 'hello', name: state.name, token: state.token, code: state.pendingCode || undefined, version: CLIENT_VERSION });
     };
     ws.onclose = () => {
+      if (state.replacing) { state.replacing = false; return; } // login form replaced this socket on purpose
       if (!state.name) return; // never logged in; nothing to retry
       // remember the table so the reconnect can put the player back on it
       state.resumeTableId = state.table ? state.table.id : null;
@@ -705,8 +707,8 @@
     if (!name) return;
     state.name = name;
     state.pendingCode = $('login-code').value.trim();
-    if (state.ws && state.ws.readyState === 1) send({ type: 'hello', name, token: state.token, code: state.pendingCode || undefined, version: CLIENT_VERSION });
-    else connect();
+    if (state.ws) { state.replacing = true; try { state.ws.close(); } catch {} state.ws = null; }
+    connect();
   });
   $('create-form').addEventListener('submit', ev => {
     ev.preventDefault();
@@ -839,9 +841,10 @@
   // ---------- moderation UI ----------
   function applyRole() {
     const mod = state.role === 'mod' || state.role === 'owner';
-    $('owner-form').hidden = state.role !== 'owner';
-    $('announce-form').hidden = state.role !== 'owner';
-    $('goto-admin').hidden = !mod;
+    const ga = $('goto-admin');
+    if ($('owner-form')) $('owner-form').hidden = state.role !== 'owner';
+    if ($('announce-form')) $('announce-form').hidden = state.role !== 'owner';
+    if (ga) ga.hidden = !mod;
     if (!mod && !$('screen-lobby-admin').hidden) showLobbyScreen('screen-lobby-games', true);
   }
   function renderRules() { $('rules-body').innerHTML = t('rulesHtml'); }
