@@ -207,6 +207,13 @@ const handlers = {
   hello(o, msg) {
     const key = lowerName(msg.name);
     if (!key || key.length > 24) return err(o.ws, 'bad_name');
+    if (o.user) { // this socket already has a session: drop it before re-login so no duplicate entries survive
+      const prev = o.user;
+      leaveTable(o);
+      if (o.inWorld) { o.inWorld = false; routeWorldEvents(world.leave(prev.id)); }
+      online.delete(prev.id);
+      o.user = null;
+    }
     let user = users[key];
     if (user) {
       if (user.token !== msg.token) {
