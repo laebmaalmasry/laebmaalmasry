@@ -34,8 +34,17 @@
       src.start();
     } catch {}
   }
-  const rollAudio = { play: () => { rattle(0.7); return { catch() {} }; }, currentTime: 0 };
-  const keepAudio = { play: () => { beep(740, 0.12, 'sine', 0.3); return { catch() {} }; }, currentTime: 0 };
+  // real recorded action sounds (CC0 library, embedded in land-sounds.js)
+  const gsnd = {};
+  function gsfx(name) {
+    const uri = window.LAND_SOUNDS && window.LAND_SOUNDS[name];
+    if (!uri) return;
+    let a = gsnd[name];
+    if (!a) { a = new Audio(uri); gsnd[name] = a; }
+    try { a.currentTime = 0; a.play().catch(() => {}); } catch {}
+  }
+  const rollAudio = { play: () => { gsfx('dice_roll'); return { catch() {} }; }, currentTime: 0 };
+  const keepAudio = { play: () => { gsfx('dice_keep'); return { catch() {} }; }, currentTime: 0 };
   const sfx = a => { try { a.play(); } catch {} };
 
   function el(tag, text, attrs) {
@@ -62,26 +71,38 @@
     if (g === 'farkle') {
       if (msg.action === 'roll') {
         sfx(rollAudio);
+        if (r.farkled) setTimeout(() => gsfx('farkle'), 850);
         if (state.game) state.game._lastRoll = r.dice || [];
         text = r.farkled ? t('farkled')(by) : t('rolledDice')(by, (r.dice || []).join(' '));
       } else if (msg.action === 'setAside') { sfx(keepAudio); text = t('setAsidePts')(by, r.points); }
-      else if (msg.action === 'bank') text = r.winner ? t('wins')(by) : t('bankedPts')(by, r.banked);
+      else if (msg.action === 'bank') {
+        if (r.winner) gsfx('win'); else gsfx('bank');
+        text = r.winner ? t('wins')(by) : t('bankedPts')(by, r.banked);
+      }
       else if (msg.action === 'endTurnAfterFarkle') text = null; // covered by the farkle roll
     } else if (g === 'dominoes') {
       if (msg.action === 'play') {
-        if (r.roundOver) text = r.gameWinner ? t('wins')(by) : t('roundWin')(by, r.gained);
-        else text = t('playedTile')(by, tileText(r.played));
+        if (r.roundOver) {
+          if (r.gameWinner) gsfx('win'); else gsfx('bank');
+          text = r.gameWinner ? t('wins')(by) : t('roundWin')(by, r.gained);
+        }
+        else { gsfx('domino_place'); text = t('playedTile')(by, tileText(r.played)); }
       } else if (msg.action === 'draw') {
+        gsfx('domino_draw');
         text = (by === state.name && r.drew) ? t('youDrew')(tileText(r.drew)) : t('drewTile')(by);
       } else if (msg.action === 'pass') {
-        if (r.roundOver) text = r.gameWinner ? t('wins')(r.winner) : t('roundBlocked')(r.winner, r.gained);
+        if (r.roundOver) {
+          if (r.gameWinner) gsfx('win'); else gsfx('bank');
+          text = r.gameWinner ? t('wins')(r.winner) : t('roundBlocked')(r.winner, r.gained);
+        }
         else text = t('passedTurn')(by);
-      } else if (msg.action === 'nextRound') text = t('roundLine')(r.roundNumber);
+      } else if (msg.action === 'nextRound') { gsfx('domino_shuffle'); text = t('roundLine')(r.roundNumber); }
     } else if (g === 'snakes') {
       if (msg.action === 'roll') {
-        if (r.winner) text = t('wins')(by);
-        else if (r.event === 'ladder') text = t('onLadder')(by, r.at);
-        else if (r.event === 'snake') text = t('onSnake')(by, r.at);
+        gsfx('dice_roll');
+        if (r.winner) { setTimeout(() => gsfx('win'), 800); text = t('wins')(by); }
+        else if (r.event === 'ladder') { setTimeout(() => gsfx('ladder'), 600); text = t('onLadder')(by, r.at); }
+        else if (r.event === 'snake') { setTimeout(() => gsfx('snake'), 600); text = t('onSnake')(by, r.at); }
         else if (r.bounced) text = t('bounced')(by, r.at);
         else text = t('rolledDie')(by, r.die);
       }
