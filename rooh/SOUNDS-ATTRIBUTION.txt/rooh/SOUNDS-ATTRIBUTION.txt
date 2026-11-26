@@ -1,0 +1,34 @@
+SOUND LIBRARY CREDITS
+
+All sounds below are real recordings from OpenGameArt.org, every one licensed CC0
+(Creative Commons Zero / public domain dedication): free for any use, no attribution
+required. Credits are kept here anyway. Files were trimmed/amplified/converted to
+mono Ogg Vorbis for size; sources are linked untouched.
+
+step_ground.ogg 5928         bytes  CC0  TinyWorlds                   stone01.ogg                          https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud
+step_grass.ogg 7011         bytes  CC0  TinyWorlds                   leaves01.ogg                         https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud
+step_bridge.ogg 5520         bytes  CC0  TinyWorlds                   wood01.ogg                           https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud
+step_tree.ogg  7467         bytes  CC0  TinyWorlds                   leaves02.ogg                         https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud
+land_ground.ogg 10265        bytes  CC0  TinyWorlds                   gravel.ogg                           https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud
+land_grass.ogg 5669         bytes  CC0  TinyWorlds                   mud02.ogg                            https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud
+land_bridge.ogg 6185         bytes  CC0  TinyWorlds                   wood03.ogg                           https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud
+land_tree.ogg  7045         bytes  CC0  TinyWorlds                   leaves01.ogg (amplified)             https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud
+jump.ogg       8065         bytes  CC0  pyranostudios                whoosh2_0.wav (trimmed)              https://opengameart.org/content/air-whoosh
+splash.ogg     15172        bytes  CC0  qubodup (pdsounds.org recordings) water_splash-01.flac                 https://opengameart.org/content/6-short-water-splashes
+wind.ogg       3418         bytes  CC0  Thimras                      park_ambience_wind.wav (1s gust cut) https://opengameart.org/content/park-ambiences
+amb_town.ogg   180419       bytes  CC0  SkyleTheFrench               busy_but_calm_street_0.ogg (25s loop cut) https://opengameart.org/content/busy-but-calm-street
+amb_square.ogg 223954       bytes  CC0  Thimras                      park_ambience_birds.wav (30s loop cut, +22dB) https://opengameart.org/content/park-ambiences
+place_store.ogg 15954        bytes  CC0  PWL                          bell_ding1.wav                       https://opengameart.org/content/bell-dingschimes
+place_cafe.ogg 3584         bytes  CC0  Bobjt                        crowded_pub_2025_1.ogg (3s snippet)  https://opengameart.org/content/crowded-pub
+dice_roll.ogg  13445        bytes  CC0  RPG                          dice-14.wav                          https://opengameart.org/content/2-dice-roll-29-throws
+dice_keep.ogg  6934         bytes  CC0  Kenney                       dieThrow2.ogg                        https://opengameart.org/content/boardgame-pack
+bank.ogg       8037         bytes  CC0  StarNinjas                   coin.1.ogg                           https://opengameart.org/content/12-coin-sound-effects
+farkle.ogg     11297        bytes  CC0  0new4y                       losetrumpet_0.ogg                    https://opengameart.org/content/game-over-trumpet-sfx
+win.ogg        26940        bytes  CC0  gchoc                        winmelody.ogg (first 4.5s)           https://opengameart.org/content/win-fanfare
+domino_place.ogg 5458         bytes  CC0  Kenney                       chipsCollide1.ogg                    https://opengameart.org/content/boardgame-pack
+domino_shuffle.ogg 17684        bytes  CC0  Kenney                       dieShuffle1.ogg (+4dB)               https://opengameart.org/content/boardgame-pack
+domino_draw.ogg 8018         bytes  CC0  Kenney                       cardSlide1.ogg                       https://opengameart.org/content/boardgame-pack
+ladder.ogg     8883         bytes  CC0  pyranostudios                whoosh2_0.wav (pitched up, trimmed)  https://opengameart.org/content/air-whoosh
+snake.ogg      9054         bytes  CC0  pyranostudios                whoosh2_0.wav (reversed, pitched down, +6dB) https://opengameart.org/content/air-whoosh
+
+Total embedded: 25 files, 621406 bytes raw Ogg (base64 in land-sounds.js).
