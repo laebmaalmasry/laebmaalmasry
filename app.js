@@ -25,7 +25,7 @@
   window.announce = m => announce(m);
   window.send = obj => send(obj);
   window.notifPlay = () => notifAudio.play().catch(() => {});
-  const CLIENT_VERSION = 'vE-2026-11-26';
+  const CLIENT_VERSION = 'vF-2026-11-26';
   window.CLIENT_VERSION = CLIENT_VERSION;
   const t = key => STRINGS[state.lang][key];
   const terr = code => (STRINGS[state.lang].errors[code]) || code;
@@ -583,13 +583,13 @@
       item('miShareDeviceAudio', null, true);
       item('miShareClip', null, true);
       if (!noGame) item('miGameInfo', () => announce(t('gameInfoLine')(t(KIND_KEYS[tb.kind || 'farkle']), tb.min, tb.max)));
-      if (!noGame) item('miHowToPlay', null, true);
+      if (!noGame) item('miHowToPlay', () => openHowTo());
       item('miLeaveRoom', () => send({ type: 'leave_table' }));
     } else {
       if (!noGame) item('miStart', () => send({ type: 'start_game' }));
       item('miWhoIsOn', () => announce(t('playersList')(tb.players.join('، '))));
       if (!noGame) item('miGameInfo', () => announce(t('gameInfoLine')(t(KIND_KEYS[tb.kind || 'farkle']), tb.min, tb.max)));
-      if (!noGame) item('miHowToPlay', null, true);
+      if (!noGame) item('miHowToPlay', () => openHowTo());
       item('miLeaveRoom', () => send({ type: 'leave_table' }));
     }
     dlg.showModal();
@@ -632,6 +632,18 @@
       focusFirst();
     };
     renderList();
+  }
+  function openHowTo() {
+    const tb = state.table;
+    if (!tb) return;
+    const kind = tb.kind || 'farkle';
+    const key = { farkle: 'howtoFarkle', dominoes: 'howtoDominoes', snakes: 'howtoSnakes' }[kind];
+    if (!key) return;
+    const dlg = $('howto-dialog');
+    $('howto-h').textContent = t('miHowToPlay') + ' — ' + t(KIND_KEYS[kind]);
+    $('howto-body').innerHTML = t(key);
+    if (!dlg.open) dlg.showModal();
+    $('howto-body').focus();
   }
   function openHostMenu() {
     // إدارة المضيف submenu: make private, invite, replace, transfer host, kick, kick+ban, back
