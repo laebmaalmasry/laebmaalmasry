@@ -25,7 +25,7 @@
   window.announce = m => announce(m);
   window.send = obj => send(obj);
   window.notifPlay = () => notifAudio.play().catch(() => {});
-  const CLIENT_VERSION = 'vB-2026-11-26';
+  const CLIENT_VERSION = 'vC-2026-11-26';
   window.CLIENT_VERSION = CLIENT_VERSION;
   const t = key => STRINGS[state.lang][key];
   const terr = code => (STRINGS[state.lang].errors[code]) || code;
@@ -76,6 +76,7 @@
       case 'kickban': return t('logKickBanned')(ev.name);
       case 'host': return t('logHost')(ev.name);
       case 'voice': return t('logVoice')(ev.name);
+      case 'restored': return t('logRestored')(ev.name);
       default: return '';
     }
   }
@@ -330,6 +331,12 @@
         body.focus();
         break;
       }
+      case 'table_saved': announce(t('roomSaved')); break;
+      case 'saved_list':
+        lastSaved = msg.saved || [];
+        if (state.lobbyView === 'savedItem' && !lastSaved.some(x => x.id === state.savedId)) { state.lobbyView = 'main'; state.savedId = null; }
+        if (!$('view-lobby').hidden && (state.lobbyFilter === 'saved' || state.lobbyView === 'savedItem')) renderLobbyMenu(true);
+        break;
       case 'tables': renderTables(msg.tables); break;
       case 'friends': renderFriends(msg.friends); break;
       case 'joined':
@@ -411,6 +418,13 @@
   state.lobbyView = 'main';
   state.lobbyFilter = 'all';
   state.lobbyKind = null;
+  state.savedId = null;
+  let lastSaved = [];
+  const fmtSavedDate = ts => {
+    const d = new Date(ts);
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
   const KIND_KEYS = { farkle: 'gameFarkle', dominoes: 'gameDominoes', snakes: 'gameSnakes', chat: 'gameChatRoom' };
   const KIND_ORDER = ['farkle', 'dominoes', 'snakes', 'chat'];
   function kindTables(kind) { return lastTables.filter(tb => (tb.kind || 'farkle') === kind); }
@@ -439,11 +453,23 @@
         add(mkMenuBtn(t('filterName_' + f), () => {
           state.lobbyFilter = f;
           state.lobbyView = 'main';
+          if (f === 'saved') send({ type: 'saved_list' });
           announce(t('filterNow')(t('filterName_' + f)));
           renderLobbyMenu(true);
         }));
       }
       add(mkMenuBtn(t('back'), () => { state.lobbyView = 'main'; renderLobbyMenu(true); }));
+    } else if (state.lobbyView === 'savedItem' && state.savedId != null) {
+      const s = (lastSaved || []).find(x => x.id === state.savedId);
+      if (s) {
+        add(mkMenuBtn(t('miRestore'), () => send({ type: 'restore_saved', id: s.id })));
+        add(mkMenuBtn(t('miDelete'), () => {
+          const doIt = () => send({ type: 'delete_saved', id: s.id });
+          if (state.confirmDanger) confirmDlg(t('confirmDeleteSaved'), t('confirmYes'), doIt);
+          else doIt();
+        }));
+      }
+      add(mkMenuBtn(t('back'), () => { state.lobbyView = 'main'; state.savedId = null; renderLobbyMenu(true); }));
     } else if (state.lobbyView === 'kind' && state.lobbyKind) {
       const kind = state.lobbyKind;
       add(mkMenuBtn(t('createTableBtn'), () => {
@@ -467,7 +493,14 @@
           }));
         }
       } else if (state.lobbyFilter === 'saved') {
-        add(mkMenuBtn(t('noSavedTables'), null, true));
+        if (!lastSaved.length) add(mkMenuBtn(t('noSavedTables'), null, true));
+        for (const s of lastSaved) {
+          add(mkMenuBtn(t('savedRow')(t(KIND_KEYS[s.kind] || 'gameFarkle'), fmtSavedDate(s.savedAt)), () => {
+            state.lobbyView = 'savedItem';
+            state.savedId = s.id;
+            renderLobbyMenu(true);
+          }));
+        }
       } else {
         const wantPlaying = state.lobbyFilter === 'playing';
         const rows = lastTables.filter(tb => !!tb.playing === wantPlaying);
@@ -542,7 +575,7 @@
       if (!noGame) item('miRemoveBot', () => send({ type: 'remove_bot' }));
       if (!noGame) item('miReplacePlayer', null, true);
       item('miMakePrivate', null, true);
-      item('miSaveRoom', null, true); // cycle B
+      item('miSaveRoom', () => send({ type: 'save_table' }));
       item('miInviteFriend', null, true);
       item('miHostMgmt', () => openHostMenu());
       item('miShareDeviceAudio', null, true);
