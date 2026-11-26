@@ -10,8 +10,13 @@
   const send = o => window.send(o);
 
   const sounds = {};
-  for (const n of ['step', 'jump', 'splash', 'wind', 'pm', 'place', 'power', 'enter', 'edge', 'online', 'land_ground', 'land_bridge', 'land_grass', 'land_tree']) {
+  // real recordings embedded in land-sounds.js; classic UI cues stay as small files
+  for (const n of ['step', 'jump', 'splash', 'wind', 'pm', 'place', 'power', 'enter', 'edge', 'online',
+                   'step_ground', 'step_grass', 'step_bridge', 'step_tree',
+                   'land_ground', 'land_bridge', 'land_grass', 'land_tree',
+                   'amb_town', 'amb_square', 'place_store', 'place_cafe']) {
     const embedded = window.LAND_SOUNDS && window.LAND_SOUNDS[n];
+    if (!embedded && !['pm', 'place', 'power', 'enter', 'edge', 'online', 'step'].includes(n)) continue;
     sounds[n] = new Audio(embedded || n + '.ogg');
   }
   function play(name) {
@@ -20,6 +25,24 @@
     a.currentTime = 0;
     a.play().catch(() => {});
   }
+  // one looping ambience per area; follows the player across area changes
+  let amb = null;
+  const AREA_AMB = { areaTown: 'amb_town', areaSquare: 'amb_square' };
+  function setAmbience(areaKey) {
+    const name = AREA_AMB[areaKey] || null;
+    if (amb && amb._name === name) return;
+    if (amb) { try { amb.pause(); } catch {} amb = null; }
+    if (!name || !sounds[name]) return;
+    const a = sounds[name];
+    a.loop = true;
+    a.volume = 0.45;
+    a._name = name;
+    a.currentTime = 0;
+    a.play().catch(() => {});
+    amb = a;
+  }
+  const STEP_BY_SURFACE = { ground: 'step_ground', grass: 'step_grass', bridge: 'step_bridge', tree: 'step_tree' };
+  const PLACE_SOUND = { placeStore: 'place_store', placeCafe: 'place_cafe' };
   function playTimes(name, n) {
     // wind per measured step, capped so long distances stay usable
     const count = Math.min(n, 12);
@@ -46,9 +69,10 @@
         window.showView('world');
         $('adv-focus').focus();
         play('enter');
+        setAmbience(ev.area);
         say(t('advEntered')(t(ev.area), ev.x));
         break;
-      case 'moved': play('step'); announce(t('advMoved')(ev.x)); break;
+      case 'moved': play(STEP_BY_SURFACE[ev.surface] || 'step_ground'); announce(t('advMoved')(ev.x)); break;
       case 'blocked_edge': play('edge'); announce(t('advBlockedEdge')); break;
       case 'splash': play('splash'); announce(t('advSplash')); break;
       case 'jump_splash': play('splash'); announce(t('advJumpSplash')); break;
@@ -70,9 +94,9 @@
         break;
       }
       case 'explore_edge': play('edge'); announce(t('advExploreEdge')); break;
-      case 'at_place': play('place'); announce(t('advAtPlace')(t(ev.place), ev.canEnter)); break;
+      case 'at_place': play(PLACE_SOUND[ev.place] || 'place'); announce(t('advAtPlace')(t(ev.place), ev.canEnter)); break;
       case 'nothing_to_enter': play('edge'); announce(t('advNothingToEnter')); break;
-      case 'entered_place': play('enter'); say(t('advEnteredPlace')(t(ev.area))); break;
+      case 'entered_place': play('enter'); setAmbience(ev.area); say(t('advEnteredPlace')(t(ev.area))); break;
       case 'where': announce(t('advWhere')(t(ev.area), ev.place ? t(ev.place) : null, ev.x)); break;
       case 'online': play('online'); announce(t('advOnline')(ev.ar, ev.en)); break;
       case 'player_entered': say(t('advPlayerEntered')(ev.name)); break;
@@ -82,6 +106,7 @@
   }
 
   function onLeft() {
+    setAmbience(null);
     announce(t('advYouLeft'));
     window.showView('lobby');
   }
