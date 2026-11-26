@@ -111,9 +111,10 @@ class WorldEngine {
       ];
     }
     p.x = nx;
+    const surface = surfaceAt(p.area, p.x);
     const events = [
-      { to: id, kind: 'moved', x: p.x, dir },
-      { to: 'area', area: p.area, except: id, kind: 'player_move', name: p.name, x: p.x, moveKind: 'walk' },
+      { to: id, kind: 'moved', x: p.x, dir, surface },
+      { to: 'area', area: p.area, except: id, kind: 'player_move', name: p.name, x: p.x, moveKind: 'walk', surface },
     ];
     this._arriveEvents(p, events);
     return events;
