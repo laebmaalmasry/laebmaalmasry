@@ -25,7 +25,7 @@
   window.announce = m => announce(m);
   window.send = obj => send(obj);
   window.notifPlay = () => notifAudio.play().catch(() => {});
-  const CLIENT_VERSION = 'vD-2026-11-26';
+  const CLIENT_VERSION = 'vE-2026-11-26';
   window.CLIENT_VERSION = CLIENT_VERSION;
   const t = key => STRINGS[state.lang][key];
   const terr = code => (STRINGS[state.lang].errors[code]) || code;
@@ -572,7 +572,7 @@
     if (isHost) {
       if (!noGame) item('miStart', () => send({ type: 'start_game' }));
       item('miWhoIsOn', () => announce(t('playersList')(tb.players.join('، '))));
-      if (!noGame) item('miGameOptions', null, true);
+      if (!noGame) item('miGameOptions', () => openOptionsMenu(), (tb.kind || 'farkle') !== 'farkle');
       if (!noGame) item('miAddBot', () => send({ type: 'add_bot' }));
       if (!noGame) item('miRemoveBot', () => send({ type: 'remove_bot' }));
       if (!noGame) item('miReplacePlayer', null, true);
@@ -595,6 +595,43 @@
     dlg.showModal();
     const b = box.querySelector('button');
     if (b) setTimeout(() => b.focus(), 0);
+  }
+  function openOptionsMenu() {
+    const tb = state.table;
+    if (!tb) return;
+    const dlg = $('table-menu-dialog');
+    const box = $('table-menu-buttons');
+    const VALUES = { firstBankMin: [50, 100, 200], minBank: [30, 40, 50, 100], target: [1000, 2000, 3000, 5000] };
+    const stage = Object.assign({ firstBankMin: 50, minBank: 30, target: 1000 }, tb.options || {});
+    if (!dlg.open) dlg.showModal();
+    const focusFirst = () => { const f = box.querySelector('button'); if (f) setTimeout(() => f.focus(), 0); };
+    const mkBtn = (label, fn) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.tabIndex = -1;
+      b.addEventListener('click', fn);
+      box.appendChild(b);
+    };
+    const renderList = () => {
+      $('table-menu-h').textContent = t('miGameOptions');
+      box.innerHTML = '';
+      mkBtn(t('optRow')(t('optFirstBank'), stage.firstBankMin), () => renderValues('firstBankMin', 'optFirstBank'));
+      mkBtn(t('optRow')(t('optLaterBank'), stage.minBank), () => renderValues('minBank', 'optLaterBank'));
+      mkBtn(t('optRow')(t('optTarget'), stage.target), () => renderValues('target', 'optTarget'));
+      mkBtn(t('saveChanges'), () => { send({ type: 'set_options', firstBankMin: stage.firstBankMin, minBank: stage.minBank, target: stage.target }); dlg.close(); announce(t('optionsSaved')); });
+      mkBtn(t('back'), () => dlg.close());
+      focusFirst();
+    };
+    const renderValues = (field, labelKey) => {
+      $('table-menu-h').textContent = t(labelKey);
+      box.innerHTML = '';
+      for (const v of VALUES[field]) {
+        mkBtn(String(v) + (v === stage[field] ? ' ✓' : ''), () => { stage[field] = v; announce(t('optRow')(t(labelKey), v)); renderList(); });
+      }
+      mkBtn(t('back'), () => renderList());
+      focusFirst();
+    };
+    renderList();
   }
   function openHostMenu() {
     // إدارة المضيف submenu: make private, invite, replace, transfer host, kick, kick+ban, back
