@@ -6,6 +6,11 @@
     lang: localStorage.getItem('gp.lang') || 'ar',
     notif: localStorage.getItem('gp.notif') !== 'off',
     music: Number(localStorage.getItem('gp.music') || '0'),
+    confirmDanger: localStorage.getItem('gp.confirmDanger') !== 'off',
+    botThink: Number(localStorage.getItem('gp.botThink') || '1000'),
+    clearKept: localStorage.getItem('gp.clearKept') === 'on',
+    keepMode: localStorage.getItem('gp.keepMode') || 'markers',
+    autoMic: localStorage.getItem('gp.autoMic') === 'on',
     name: localStorage.getItem('gp.name') || '',
     token: localStorage.getItem('gp.token') || '',
     table: null,
@@ -20,7 +25,7 @@
   window.announce = m => announce(m);
   window.send = obj => send(obj);
   window.notifPlay = () => notifAudio.play().catch(() => {});
-  const CLIENT_VERSION = 'v9-2026-11-26';
+  const CLIENT_VERSION = 'vB-2026-11-26';
   window.CLIENT_VERSION = CLIENT_VERSION;
   const t = key => STRINGS[state.lang][key];
   const terr = code => (STRINGS[state.lang].errors[code]) || code;
@@ -44,6 +49,11 @@
     document.querySelectorAll(`input[name="lang"]`).forEach(r => { r.checked = r.value === state.lang; });
     document.querySelectorAll(`input[name="music"]`).forEach(r => { r.checked = Number(r.value) === state.music; });
     $('notif-toggle').checked = state.notif;
+    $('opt-confirm-danger').checked = state.confirmDanger;
+    $('opt-bot-think').value = String(state.botThink);
+    $('opt-clear-kept').checked = state.clearKept;
+    $('opt-keep-mode').value = state.keepMode;
+    $('auto-mic').checked = state.autoMic;
     if (state.table) renderTable();
     renderFriends(lastFriends);
     renderTables(lastTables);
@@ -185,6 +195,7 @@
       window.__voiceRoom = lkRoom; // test hook
       // never auto-publish: the mic only goes live from an explicit F2 / button press
       if (voiceWanted) { announce(t('voiceOn')); addRoomLine(t('logVoiceSelf')); }
+      if (voiceWanted && state.autoMic && !state.mic) setMic(true);
     } catch (e) {
       lkRoom = null;
       if (!voiceWanted) return;
@@ -307,6 +318,16 @@
       case 'client_old':
         announce(t('clientOld'));
         break;
+      case 'online_list': {
+        $('online-h').textContent = t('onlineTitle')(msg.names.length);
+        const body = $('online-body');
+        body.innerHTML = '';
+        if (!msg.names.length) body.textContent = t('onlineEmpty');
+        else for (const n of msg.names) { const p = document.createElement('p'); p.textContent = n; body.appendChild(p); }
+        $('online-dialog').showModal();
+        body.focus();
+        break;
+      }
       case 'tables': renderTables(msg.tables); break;
       case 'friends': renderFriends(msg.friends); break;
       case 'joined':
@@ -424,7 +445,7 @@
     } else if (state.lobbyView === 'kind' && state.lobbyKind) {
       const kind = state.lobbyKind;
       add(mkMenuBtn(t('createTableBtn'), () => {
-        send({ type: 'create_table', name: t(KIND_KEYS[kind]), game: kind });
+        send({ type: 'create_table', name: t(KIND_KEYS[kind]), game: kind, botDelay: state.botThink });
       }));
       for (const tb of kindTables(kind)) {
         add(mkMenuBtn(tableRowText(tb), () => send({ type: 'join_table', id: tb.id })));
@@ -457,7 +478,7 @@
   window.renderLobbyMenu = renderLobbyMenu;
 
   // ---------- vertical-menu model: Tab lands on a menu container, Up/Down + Enter inside ----------
-  const menuScopeOf = a => a && a.closest ? a.closest('#game-view, #game-menu-buttons, #lobby-games-menu, #table-menu-buttons') : null;
+  const menuScopeOf = a => a && a.closest ? a.closest('#game-view, #game-menu-buttons, #lobby-games-menu, #table-menu-buttons, #f1-menu-buttons, #confirm-buttons') : null;
   const menuButtons = scope => [...scope.querySelectorAll('button:not([hidden])')].filter(b => b.getAttribute('aria-disabled') !== 'true' && !b.disabled && b.id !== 'end-game-button');
   document.addEventListener('keydown', ev => {
     if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
@@ -575,7 +596,12 @@
       const b = document.createElement('button');
       b.textContent = p;
       b.tabIndex = -1;
-      b.addEventListener('click', () => { dlg.close(); send({ type: action, name: p }); });
+      b.addEventListener('click', () => {
+        dlg.close();
+        const doIt = () => send({ type: action, name: p });
+        if (state.confirmDanger && action !== 'transfer_host') confirmDlg(t('confirmDangerAction')(p), t('confirmYes'), doIt);
+        else doIt();
+      });
       box.appendChild(b);
     }
     const back = document.createElement('button');
@@ -684,7 +710,7 @@
   });
   $('create-form').addEventListener('submit', ev => {
     ev.preventDefault();
-    send({ type: 'create_table', name: $('table-name-input').value });
+    send({ type: 'create_table', name: $('table-name-input').value, botDelay: state.botThink });
     $('table-name-input').value = '';
   });
   $('friend-form').addEventListener('submit', ev => {
@@ -701,23 +727,114 @@
   $('leave-button').addEventListener('click', () => send({ type: 'leave_table' }));
   $('mic-button').addEventListener('click', () => setMic(!state.mic));
   $('bot-button').addEventListener('click', () => send({ type: 'add_bot' }));
-  $('settings-button').addEventListener('click', () => { $('screens-fieldset').hidden = true; $('settings-dialog').showModal(); });
+  $('settings-button').addEventListener('click', () => openSettings());
   $('login-code-button').addEventListener('click', () => { $('login-code-text').textContent = ''; send({ type: 'login_code' }); });
 
-  // ---------- settings: jump to a lobby screen ----------
-  const GOTO_SCREEN = { 'goto-games': 'screen-lobby-games', 'goto-tables': 'screen-lobby-tables', 'goto-friends': 'screen-lobby-friends', 'goto-report': 'screen-lobby-report', 'goto-block': 'screen-lobby-block', 'goto-admin': 'screen-lobby-admin' };
-  for (const [btn, screen] of Object.entries(GOTO_SCREEN)) {
-    $(btn).addEventListener('click', () => {
-      $('settings-dialog').close();
-      if (!$('view-lobby').hidden) showLobbyScreen(screen);
-    });
+  // ---------- F1 main menu + tabbed settings (Cycle A2) ----------
+  function confirmDlg(text, yesLabel, yesFn) {
+    const d = $('confirm-dialog');
+    $('confirm-h').textContent = text;
+    const box = $('confirm-buttons');
+    box.innerHTML = '';
+    const mk = (label, fn) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.tabIndex = -1;
+      b.addEventListener('click', () => { d.close(); if (fn) fn(); });
+      box.appendChild(b);
+    };
+    mk(yesLabel, yesFn);
+    mk(t('back'), null);
+    d.showModal();
+    const b = box.querySelector('button');
+    if (b) setTimeout(() => b.focus(), 0);
   }
-  $('goto-rules').addEventListener('click', () => {
-    $('settings-dialog').close();
-    renderRules();
-    $('rules-dialog').showModal();
-    $('rules-body').focus();
+  function doLogout() {
+    const run = () => {
+      localStorage.removeItem('gp.token');
+      localStorage.removeItem('gp.name');
+      const ws = state.ws;
+      state.name = ''; state.token = ''; state.table = null; state.game = null; state.resumeTableId = null;
+      leaveVoice();
+      if (ws) { try { ws.close(); } catch {} }
+      state.ws = null;
+      show('login');
+      announce(t('loggedOut'));
+    };
+    if (state.confirmDanger) confirmDlg(t('logoutConfirm'), t('confirmLogoutYes'), run);
+    else run();
+  }
+  function openSettings() {
+    const d = $('settings-dialog');
+    selectTab(0, false);
+    d.showModal();
+    const tab = $('stab-general');
+    if (tab) setTimeout(() => tab.focus(), 0);
+  }
+  function showOnline() { send({ type: 'online_list' }); }
+  function openF1Menu() {
+    const dlg = $('f1-menu-dialog');
+    const box = $('f1-menu-buttons');
+    box.innerHTML = '';
+    const lobbyOnly = $('view-lobby').hidden;
+    const item = (key, fn) => {
+      const b = document.createElement('button');
+      b.textContent = t(key);
+      b.tabIndex = -1;
+      if (!fn) { b.setAttribute('aria-disabled', 'true'); b.addEventListener('click', () => announce(t('comingSoon'))); }
+      else b.addEventListener('click', () => { dlg.close(); fn(); });
+      box.appendChild(b);
+    };
+    item('f1Logout', doLogout);
+    item('f1Profile', null);
+    item('f1Friends', () => { if (lobbyOnly) announce(t('f1LobbyOnly')); else showLobbyScreen('screen-lobby-friends'); });
+    item('f1Messages', null);
+    item('f1Stats', null);
+    item('f1Boards', null);
+    item('f1Tournaments', null);
+    item('f1Online', showOnline);
+    item('f1Settings', openSettings);
+    item('f1Shortcuts', null);
+    item('f1Support', null);
+    item('f1Privacy', null);
+    item('f1Terms', () => { renderRules(); $('rules-dialog').showModal(); $('rules-body').focus(); });
+    dlg.showModal();
+    const b = box.querySelector('button');
+    if (b) setTimeout(() => b.focus(), 0);
+  }
+  const STABS = ['general', 'access', 'volume', 'voice', 'translate', 'privacy', 'game'];
+  function selectTab(i, focusIt) {
+    STABS.forEach((id, j) => {
+      const on = i === j;
+      const tb = $('stab-' + id);
+      tb.setAttribute('aria-selected', on ? 'true' : 'false');
+      tb.tabIndex = on ? 0 : -1;
+      $('spanel-' + id).hidden = !on;
+    });
+    if (focusIt !== false) $('stab-' + STABS[i]).focus();
+  }
+  document.addEventListener('keydown', ev => {
+    if (ev.key !== 'ArrowRight' && ev.key !== 'ArrowLeft') return;
+    const a = document.activeElement;
+    if (!a || a.getAttribute('role') !== 'tab' || !a.closest('#settings-tabs')) return;
+    ev.preventDefault();
+    let i = STABS.indexOf(a.id.slice(5));
+    i = ev.key === 'ArrowRight' ? (i + 1) % STABS.length : (i - 1 + STABS.length) % STABS.length;
+    selectTab(i);
   });
+  STABS.forEach(id => { $('stab-' + id).addEventListener('click', () => selectTab(STABS.indexOf(id))); });
+  $('settings-close').addEventListener('click', () => $('settings-dialog').close());
+  $('opt-confirm-danger').addEventListener('change', () => { state.confirmDanger = $('opt-confirm-danger').checked; localStorage.setItem('gp.confirmDanger', state.confirmDanger ? 'on' : 'off'); });
+  $('opt-bot-think').addEventListener('change', () => { state.botThink = Number($('opt-bot-think').value); localStorage.setItem('gp.botThink', String(state.botThink)); });
+  $('opt-clear-kept').addEventListener('change', () => { state.clearKept = $('opt-clear-kept').checked; localStorage.setItem('gp.clearKept', state.clearKept ? 'on' : 'off'); });
+  $('opt-keep-mode').addEventListener('change', () => { state.keepMode = $('opt-keep-mode').value; localStorage.setItem('gp.keepMode', state.keepMode); });
+  $('auto-mic').addEventListener('change', () => { state.autoMic = $('auto-mic').checked; localStorage.setItem('gp.autoMic', state.autoMic ? 'on' : 'off'); });
+  $('privacy-blocked').addEventListener('click', () => {
+    $('settings-dialog').close();
+    if (!$('view-lobby').hidden) showLobbyScreen('screen-lobby-block');
+    else announce(t('f1LobbyOnly'));
+  });
+  $('online-close').addEventListener('click', () => $('online-dialog').close());
 
   // ---------- moderation UI ----------
   function applyRole() {
@@ -779,13 +896,14 @@
   }
   document.addEventListener('keydown', ev => {
     if (ev.key === 'F1') {
+      if (!$('view-world').hidden) return;
       ev.preventDefault();
-      const d = $('help-dialog');
-      if (d.open) d.close(); else { renderHelp(); d.showModal(); $('help-body').focus(); }
+      const d = $('f1-menu-dialog');
+      if (d.open) d.close(); else openF1Menu();
     } else if (ev.key === 'F10') {
       ev.preventDefault();
       const d = $('settings-dialog');
-      if (d.open) d.close(); else { $('screens-fieldset').hidden = $('view-lobby').hidden; d.showModal(); }
+      if (d.open) d.close(); else openSettings();
     } else if (ev.key === 'F9') {
       if (state.role !== 'mod' && state.role !== 'owner') return;
       if ($('view-lobby').hidden) return;
@@ -805,6 +923,14 @@
     } else if (ev.key === 'F2') {
       ev.preventDefault();
       setMic(!state.mic);
+    } else if (ev.code === 'KeyH') {
+      const htag = ev.target && ev.target.tagName;
+      if (htag === 'INPUT' || htag === 'TEXTAREA' || (ev.target && ev.target.isContentEditable)) return;
+      if ($('view-lobby').hidden) return;
+      if (document.querySelector('dialog[open]')) return;
+      ev.preventDefault();
+      const hd = $('help-dialog');
+      if (hd.open) hd.close(); else { renderHelp(); hd.showModal(); $('help-body').focus(); }
     } else if (ev.code === 'KeyR') {
       const tag = ev.target && ev.target.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || (ev.target && ev.target.isContentEditable)) return;
