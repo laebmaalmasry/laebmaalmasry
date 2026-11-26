@@ -159,15 +159,24 @@
   const FARKLE_VERSION = 'farkle-v7-2026-11-25';
   window.FARKLE_VERSION = FARKLE_VERSION;
 
-  function farkleSelPoints(g, dice) {
-    const vals = [...g.sel].map(i => dice[i]);
+  function farkleKeptPoints(g, dice) {
+    const vals = (g.kept || []).map(i => dice[i]);
     if (!vals.length || !window.FarkleRules) return 0;
     return window.FarkleRules.scoreSelection(vals).points;
   }
-  function farkleCanBank(s, myIdx) {
+  function farkleBankTotals(s, myIdx, g, dice) {
+    // mirror the table's option values so the bank button tells the truth
+    const opts = (state.table && state.table.options) || {};
+    const D = window.FarkleRules ? window.FarkleRules.FARKLE_DEFAULTS : { minBank: 30, firstBankMin: 50 };
+    const minBank = opts.minBank == null ? D.minBank : opts.minBank;
+    const firstBankMin = opts.firstBankMin == null ? D.firstBankMin : opts.firstBankMin;
+    const pending = farkleKeptPoints(g, dice || []);
+    return { total: s.turnPoints + pending, minBank, firstBankMin };
+  }
+  function farkleCanBank(s, myIdx, g, dice) {
     if (myIdx < 0 || s.phase === 'over') return false;
-    const D = (window.FarkleRules && window.FarkleRules.FARKLE_DEFAULTS) || { minBank: 30, firstBankMin: 50 };
-    return s.turnPoints >= D.minBank && (s.scores[myIdx] > 0 || s.turnPoints >= D.firstBankMin);
+    const bt = farkleBankTotals(s, myIdx, g || { kept: [] }, dice || []);
+    return bt.total >= bt.minBank && (s.scores[myIdx] > 0 || bt.total >= bt.firstBankMin);
   }
   function farkleLog(text) {
     const g = state.game;
@@ -181,46 +190,66 @@
     if (args) msg.args = args;
     send(msg);
   }
-  function farkleKeep(g) {
-    farkleSend('setAside', [[...g.sel].sort((a, b) => a - b)]);
-    g.sel = new Set();
+  function farkleFlush(g, then) {
+    // send the pending kept dice as ONE selection (keeps combos intact), then run the queued action
+    const kept = (g.kept || []).slice().sort((a, b) => a - b);
+    if (!kept.length) { if (then) farkleSend(then); return; }
+    g._queued = then;
+    farkleSend('setAside', [kept]);
+  }
+  function farkleKeepDie(g, dice, i) {
+    if (!isMyTurn()) { announce(t('notYourTurn')); return; }
+    if (g.state.phase !== 'deciding') { announce(t('rollFirstToPick')); return; }
+    if (!g.kept) g.kept = [];
+    if (g.kept.includes(i)) return;
+    g.kept.push(i);
+    sfx(keepAudio);
+    const bt = farkleBankTotals(g.state, myIndex(), g, dice);
+    announce(t('dieKeptBank')(dice[i], bt.total));
+    renderGame();
+  }
+  function farkleUndoKept(g) {
+    if (!(g.kept || []).length) return;
+    g.kept = [];
+    g._queued = null;
+    announce(t('keptReturned'));
+    renderGame();
+  }
+  function farkleRollRest(g) {
+    const s = g.state;
+    if (!isMyTurn()) { announce(t('notYourTurn')); return; }
+    if (s.phase === 'must_roll') { farkleSend('roll'); return; }
+    if (s.phase !== 'deciding') return;
+    if (!(g.kept || []).length) { announce(t('selectDiceFirst')); return; }
+    farkleFlush(g, 'roll');
+  }
+  function farkleAfterState(s2) {
+    const g = state.game;
+    if (!g || g.id !== 'farkle' || !g._queued) return;
+    if (s2.phase === 'must_roll' && !s2.lastRoll) {
+      const next = g._queued;
+      g._queued = null;
+      farkleSend(next);
+    }
   }
   function farklePrimaryLabel(g, s, dice) {
-    const selPts = farkleSelPoints(g, dice);
     if (s.phase === 'must_roll') return s.turnPoints > 0 ? t('rollRest')(s.diceLeft) : t('rollDice');
-    if (s.phase === 'deciding') return t('keepBtn')(selPts);
+    if (s.phase === 'deciding') { const left = dice.length - (g.kept || []).length; return t('rollRest')(left || 6); } // 0 kept-open = hot dice, engine rerolls 6
     return t('okBtn'); // over
   }
   function farklePrimary(g) {
     const s = g.state;
     if (!isMyTurn()) { announce(t('notYourTurn')); return; }
     if (s.phase === 'must_roll') farkleSend('roll');
-    else if (s.phase === 'deciding') {
-      const dice = s.lastRoll || [];
-      if (farkleSelPoints(g, dice) > 0) farkleKeep(g);
-      else announce(t('selectDiceFirst'));
-    } else if (s.phase === 'over') farkleSend('endTurnAfterFarkle');
+    else if (s.phase === 'deciding') farkleRollRest(g);
+    else if (s.phase === 'over') farkleSend('endTurnAfterFarkle');
   }
   function farkleTryBank() {
     const g = state.game, s = g.state;
     if (!isMyTurn()) { announce(t('notYourTurn')); return; }
-    if (farkleCanBank(s, myIndex())) farkleSend('bank');
-    else announce(t('cannotBank'));
-  }
-  function farkleToggleDie(g, dice, i, btn) {
-    if (!isMyTurn()) { announce(t('notYourTurn')); return; }
-    if (g.state.phase !== 'deciding') { announce(t('rollFirstToPick')); return; }
-    if (g.sel.has(i)) g.sel.delete(i); else g.sel.add(i);
-    const on = g.sel.has(i);
-    btn.setAttribute('aria-pressed', String(on));
-    btn.textContent = t('dieBtn')(i + 1, dice[i]) + (on ? ' — ' + t('selectedMark') : '');
-    sfx(keepAudio);
-    const pts = farkleSelPoints(g, dice);
-    let msg = on ? t('diePicked')(dice[i], pts) : t('dieUnpicked')(dice[i], pts);
-    if (pts === 0 && g.sel.size) msg += '. ' + t('selInvalid');
-    announce(msg);
-    const p = $('farkle-primary');
-    if (p) p.textContent = farklePrimaryLabel(g, g.state, dice);
+    const dice = s.lastRoll || [];
+    if (!farkleCanBank(s, myIndex(), g, dice)) { announce(t('cannotBank')); return; }
+    farkleFlush(g, 'bank');
   }
 
   function renderFarkle(view, g, s) {
@@ -228,7 +257,7 @@
     const myIdx = myIndex();
     const dice = s.lastRoll || [];
     const rollKey = s.turn + ':' + s.turnPoints + ':' + dice.join(',');
-    if (g.selKey !== rollKey) { g.sel = new Set(); g.selKey = rollKey; }
+    if (g.selKey !== rollKey) { g.kept = []; g.selKey = rollKey; g._queued = null; }
     const phaseKey = s.turn + ':' + s.phase + ':' + dice.length + ':' + (s.farkled ? 1 : 0);
     const becameMine = mine && g._prevMine !== true;
     const stateChanged = g._prevPhaseKey !== phaseKey;
@@ -251,13 +280,14 @@
     panel.appendChild(el('h5', t('diceHeading')));
     const diceBox = el('div', null, { class: 'menu-vertical', id: 'farkle-dice' });
     panel.appendChild(diceBox);
+    const keptList = g.kept || [];
+    const open = dice.map((d, i) => [d, i]).filter(pair => !keptList.includes(pair[1]));
     if (!dice.length) diceBox.appendChild(el('p', t('noDiceYet')));
-    dice.forEach((d, i) => {
-      const on = g.sel.has(i);
-      const b = el('button', t('dieBtn')(i + 1, d) + (on ? ' — ' + t('selectedMark') : ''), {
-        id: 'farkle-die-' + i, class: 'die-btn', 'aria-pressed': on ? 'true' : 'false'
-      });
-      b.addEventListener('click', () => farkleToggleDie(g, dice, i, b));
+    else if (!open.length) diceBox.appendChild(el('p', t('allDiceKept')));
+    open.forEach(pair => {
+      const d = pair[0], i = pair[1];
+      const b = el('button', t('dieBtn')(i + 1, d), { id: 'farkle-die-' + i, class: 'die-btn' });
+      b.addEventListener('click', () => farkleKeepDie(g, dice, i));
       diceBox.appendChild(b);
     });
 
@@ -270,10 +300,16 @@
     });
     primary.addEventListener('click', () => farklePrimary(g));
     actions.appendChild(primary);
-    const canBank = mine && farkleCanBank(s, myIdx);
-    const bank = el('button', t('bankNow')(s.turnPoints), { id: 'farkle-bank', 'aria-disabled': canBank ? 'false' : 'true' });
+    const bt = farkleBankTotals(s, myIdx, g, dice);
+    const canBank = mine && farkleCanBank(s, myIdx, g, dice);
+    const bank = el('button', t('bankNow')(bt.total), { id: 'farkle-bank', 'aria-disabled': canBank ? 'false' : 'true' });
     bank.addEventListener('click', () => farkleTryBank());
     actions.appendChild(bank);
+    if (mine && keptList.length) {
+      const undo = el('button', t('undoKept'), { id: 'farkle-undo' });
+      undo.addEventListener('click', () => farkleUndoKept(g));
+      actions.appendChild(undo);
+    }
 
     renderGameLog(g);
     view.appendChild(el('p', FARKLE_VERSION, { class: 'farkle-version' }));
@@ -400,5 +436,5 @@
     holder.appendChild(logEl);
   }
 
-  window.GP = { renderGame, announceGameEvent, renderGameLog };
+  window.GP = { renderGame, announceGameEvent, renderGameLog, afterState: farkleAfterState };
 })();
