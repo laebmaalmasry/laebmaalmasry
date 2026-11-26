@@ -25,7 +25,7 @@
   window.announce = m => announce(m);
   window.send = obj => send(obj);
   window.notifPlay = () => notifAudio.play().catch(() => {});
-  const CLIENT_VERSION = 'vC-2026-11-26';
+  const CLIENT_VERSION = 'vD-2026-11-26';
   window.CLIENT_VERSION = CLIENT_VERSION;
   const t = key => STRINGS[state.lang][key];
   const terr = code => (STRINGS[state.lang].errors[code]) || code;
@@ -369,6 +369,7 @@
       case 'kicked':
         state.table = null;
         state.game = null;
+        state.lobbyView = 'main'; state.lobbyKind = null; state.savedId = null;
         leaveVoice();
         show('lobby');
         announce(msg.banned ? t('youWereKickBanned')(msg.table || '') : t('youWereKicked')(msg.table || ''));
@@ -406,6 +407,7 @@
       case 'left':
         state.table = null;
         state.game = null;
+        state.lobbyView = 'main'; state.lobbyKind = null; state.savedId = null;
         leaveVoice();
         show('lobby');
         break;
